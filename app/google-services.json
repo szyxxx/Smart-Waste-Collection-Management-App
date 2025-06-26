@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "467274666807",
+    "project_id": "bluebin-67c8a",
+    "storage_bucket": "bluebin-67c8a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:467274666807:android:55779529199dff0deec0b2",
+        "android_client_info": {
+          "package_name": "com.bluebin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDamil21SmwkmTlE9gZeJ2nqxUlCpvffFA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,237 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions for authentication and authorization
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'ADMIN';
+    }
+    
+    function isTPS() {
+      return isAuthenticated() && getUserRole() == 'TPS';
+    }
+    
+    function isDriver() {
+      return isAuthenticated() && getUserRole() == 'DRIVER';
+    }
+    
+    function isApproved() {
+      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.approved == true;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAssignedOfficer(officerId) {
+      return isAuthenticated() && request.auth.uid == officerId;
+    }
+    
+    function isAssignedDriver(driverId) {
+      return isAuthenticated() && request.auth.uid == driverId;
+    }
+    
+    // Users Collection Rules
+    match /users/{userId} {
+      // Allow users to read their own profile
+      // Allow admins to read all users
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Allow users to create their own profile during registration
+      // Allow admins to create any user
+      allow create: if isOwner(userId) || isAdmin();
+      
+      // Allow users to update their own basic info (not role or approval status)
+      // Allow admins to update any user
+      allow update: if (isOwner(userId) && 
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.approved == resource.data.approved) || 
+                      isAdmin();
+      
+      // Only admins can delete users
+      allow delete: if isAdmin();
+    }
+    
+    // TPS Collection Rules
+    match /tps/{tpsId} {
+      // All authenticated users can read TPS data
+      allow read: if isAuthenticated();
+      
+      // Only admins can create TPS locations
+      allow create: if isAdmin();
+      
+      // Admins can update any TPS
+      // TPS officers can update status of their assigned TPS
+      allow update: if isAdmin() || 
+                      (isTPS() && isApproved() && 
+                       isAssignedOfficer(resource.data.assignedOfficerId) &&
+                       // Only allow status and lastUpdated field changes for TPS officers
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
+      
+      // Only admins can delete TPS locations
+      allow delete: if isAdmin();
+    }
+    
+    // Schedules Collection Rules
+    match /schedules/{scheduleId} {
+      // Admins can read all schedules
+      // Drivers can read their own schedules (assigned to them)
+      // TPS officers can read schedules that include their assigned TPS
+      allow read: if isAdmin() || 
+                    (isDriver() && isApproved() && 
+                     resource.data.driverId == request.auth.uid) ||
+                    (isTPS() && isApproved() && isAssignedToScheduleTPS());
+      
+      // Only admins can create schedules
+      allow create: if isAdmin();
+      
+      // Admins can update any schedule
+      // Drivers can update status and completion of their own schedules
+      allow update: if isAdmin() || 
+                      (isDriver() && isApproved() && 
+                       resource.data.driverId == request.auth.uid &&
+                       // Only allow status and completion updates for drivers
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt']));
+      
+      // Only admins can delete schedules
+      allow delete: if isAdmin();
+      
+      // Helper function to check if TPS officer is assigned to any TPS in the schedule
+      function isAssignedToScheduleTPS() {
+        let tpsRoute = resource.data.tpsRoute;
+        return tpsRoute.size() > 0 &&
+               exists(/databases/$(database)/documents/tps/$(tpsRoute[0])) &&
+               get(/databases/$(database)/documents/tps/$(tpsRoute[0])).data.assignedOfficerId == request.auth.uid;
+      }
+    }
+    
+    // Proofs Collection Rules
+    match /proofs/{proofId} {
+      // Admins can read all proofs
+      // Drivers can read their own proofs
+      // TPS officers can read proofs for their assigned TPS
+      allow read: if isAdmin() || 
+                    (isDriver() && isApproved() && isAssignedDriver(resource.data.driverId)) ||
+                    (isTPS() && isApproved() && isAssignedToProofTPS());
+      
+      // Only drivers can create proofs for their own assignments
+      allow create: if isDriver() && isApproved() && 
+                      isAssignedDriver(request.resource.data.driverId) &&
+                      // Verify the driver is assigned to the schedule
+                      isAssignedToSchedule(request.resource.data.scheduleId);
+      
+      // Admins can update any proof (for verification)
+      // Drivers can update their own unverified proofs
+      allow update: if isAdmin() || 
+                      (isDriver() && isApproved() && 
+                       isAssignedDriver(resource.data.driverId) &&
+                       resource.data.verified == false);
+      
+      // Only admins can delete proofs
+      allow delete: if isAdmin();
+      
+      // Helper functions for proof validation
+      function isAssignedToProofTPS() {
+        return exists(/databases/$(database)/documents/tps/$(resource.data.tpsId)) &&
+               get(/databases/$(database)/documents/tps/$(resource.data.tpsId)).data.assignedOfficerId == request.auth.uid;
+      }
+      
+      function isAssignedToSchedule(scheduleId) {
+        return exists(/databases/$(database)/documents/schedules/$(scheduleId)) &&
+               get(/databases/$(database)/documents/schedules/$(scheduleId)).data.driverId == request.auth.uid;
+      }
+    }
+
+    // Optimized Schedules Collection Rules
+    match /optimized_schedules/{scheduleId} {
+      // Admins can read all optimized schedules
+      // Drivers can read optimized schedules assigned to them
+      allow read: if isAdmin() || 
+                    (isDriver() && isApproved() && 
+                     resource.data.assignedDriverId == request.auth.uid);
+      
+      // Only admins can create optimized schedules (AI-generated)
+      allow create: if isAdmin();
+      
+      // Only admins can update optimized schedules (approval, driver assignment)
+      allow update: if isAdmin();
+      
+      // Only admins can delete optimized schedules
+      allow delete: if isAdmin();
+    }
+    
+    // Additional Collections (if you add more entities)
+    
+    // Driver Locations Collection (for real-time tracking)
+    match /driver_locations/{driverId} {
+      // Admins can read all driver locations
+      // Drivers can read/write their own location
+      allow read: if isAdmin() || 
+                    (isDriver() && isApproved() && request.auth.uid == driverId);
+      
+      // Drivers can create/update their own location
+      allow write: if isDriver() && isApproved() && request.auth.uid == driverId;
+      
+      // Only admins can delete driver locations
+      allow delete: if isAdmin();
+    }
+    
+    // Notifications Collection (if implemented)
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Only admins can create notifications
+      allow create: if isAdmin();
+      
+      // Users can update their own notifications (mark as read)
+      allow update: if isAuthenticated() && 
+                      resource.data.userId == request.auth.uid &&
+                      // Only allow read status updates
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'readAt']);
+      
+      // Only admins can delete notifications
+      allow delete: if isAdmin();
+    }
+    
+    // Reports Collection (if implemented)
+    match /reports/{reportId} {
+      // All authenticated approved users can read reports
+      allow read: if isAuthenticated() && isApproved();
+      
+      // Only admins can create reports
+      allow create: if isAdmin();
+      
+      // Only admins can update reports
+      allow update: if isAdmin();
+      
+      // Only admins can delete reports
+      allow delete: if isAdmin();
+    }
+    
+    // Development/Testing Rules (REMOVE IN PRODUCTION)
+    // Uncomment the following rules ONLY during development for seeding
+    // IMPORTANT: Remove or comment out these rules before deploying to production
+    
+    /*
+    // Development seeding rules - REMOVE IN PRODUCTION
+    match /{document=**} {
+      // Allow full access for development seeding
+      // WARNING: This is dangerous and should NEVER be used in production
+      allow read, write: if request.auth != null;
+    }
+    */
+    
+    // Note: Firestore denies access by default if no rules match
+    // No need for an explicit default deny rule
+  }
+} 
