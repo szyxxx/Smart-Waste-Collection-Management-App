@@ -1,4 +1,4 @@
-# BlueBin - Smart Waste Management App
+# Smart Waste Management App
 
 A modern Android application built with Kotlin and Jetpack Compose for efficient waste collection management, featuring three user roles: Admin, TPS Officer, and Driver with real-time tracking and photo proof collection.
 
