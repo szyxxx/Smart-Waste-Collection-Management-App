@@ -3,23 +3,21 @@ package com.bluebin.presentation.auth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -33,170 +31,177 @@ import com.bluebin.ui.theme.*
 
 @Composable
 fun AuthScreen(
-    onNavigateToMain: (UserRole) -> Unit,
+    onNavigateToMain: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
-    var isLoginMode by remember { mutableStateOf(true) }
+    var isLogin by remember { mutableStateOf(true) }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf(UserRole.TPS) }
-    var showPassword by remember { mutableStateOf(false) }
-    var showConfirmPassword by remember { mutableStateOf(false) }
+    var selectedRole by remember { mutableStateOf(UserRole.DRIVER) }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var confirmPasswordVisible by remember { mutableStateOf(false) }
+    
+    val focusManager = LocalFocusManager.current
 
-    LaunchedEffect(authState.isAuthenticated, authState.user, authState.isLoading) {
-        val currentUser = authState.user
-        // Only navigate when auth state is stable (not loading) and user is authenticated
-        if (!authState.isLoading && authState.isAuthenticated && currentUser != null && currentUser.approved) {
-            onNavigateToMain(currentUser.role)
+    // Handle auth state changes
+    LaunchedEffect(authState.user) {
+        if (authState.user != null) {
+            onNavigateToMain()
         }
     }
 
-    Box(
+    // Show error messages
+    authState.error?.let { error ->
+        LaunchedEffect(error) {
+            // Error will be displayed in UI
+        }
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
     ) {
+        // Hero Header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.primary,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Status bar spacer
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // App icon/logo placeholder
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                            RoundedCornerShape(20.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🗑️",
+                        fontSize = 40.sp
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text(
+                    text = "BlueBin",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                
+                Text(
+                    text = "Smart Waste Management System",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+
+        // Auth form
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Spacer(modifier = Modifier.height(60.dp))
-
-            // Modern Header with BlueBin branding
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+            // Auth mode toggle
+            ModernCard {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Logo with modern design
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .background(
-                                Color(0xFF4CAF50).copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(24.dp)
-                            ),
-                        contentAlignment = Alignment.Center
+                    Button(
+                        onClick = { isLogin = true },
+                        modifier = Modifier.weight(1f),
+                        colors = if (isLogin) {
+                            ButtonDefaults.buttonColors()
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        },
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = "🗑️",
-                            fontSize = 50.sp
+                            "Sign In",
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Text(
-                        text = "BlueBin",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
-                    )
-
-                    Text(
-                        text = "Smart Waste Management System",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFF666666),
-                        textAlign = TextAlign.Center
-                    )
+                    
+                    Button(
+                        onClick = { isLogin = false },
+                        modifier = Modifier.weight(1f),
+                        colors = if (!isLogin) {
+                            ButtonDefaults.buttonColors()
+                        } else {
+                            ButtonDefaults.outlinedButtonColors()
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "Sign Up",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
-
-            // Auth Form Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.White
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-            ) {
+            // Form fields
+            ModernCard {
                 Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    // Modern Tab Row
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(4.dp)
-                        ) {
-                            Button(
-                                onClick = { isLoginMode = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isLoginMode) Color.White else Color.Transparent,
-                                    contentColor = if (isLoginMode) Color(0xFF1A1A1A) else Color(0xFF666666)
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = if (isLoginMode) 2.dp else 0.dp
-                                )
-                            ) {
-                                Text(
-                                    text = "Login",
-                                    fontWeight = if (isLoginMode) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-
-                            Button(
-                                onClick = { isLoginMode = false },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (!isLoginMode) Color.White else Color.Transparent,
-                                    contentColor = if (!isLoginMode) Color(0xFF1A1A1A) else Color(0xFF666666)
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = if (!isLoginMode) 2.dp else 0.dp
-                                )
-                            ) {
-                                Text(
-                                    text = "Register",
-                                    fontWeight = if (!isLoginMode) FontWeight.Bold else FontWeight.Medium
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Name field (only for registration)
-                    if (!isLoginMode) {
+                    Text(
+                        text = if (isLogin) "Welcome Back" else "Create Account",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    // Name field (register only)
+                    if (!isLogin) {
                         OutlinedTextField(
                             value = name,
                             onValueChange = { name = it },
                             label = { Text("Full Name") },
                             leadingIcon = {
-                                Icon(Icons.Default.Person, contentDescription = "Name")
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = null
+                                )
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF4CAF50),
-                                focusedLabelColor = Color(0xFF4CAF50)
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
                             )
                         )
-                        Spacer(modifier = Modifier.height(20.dp))
                     }
 
                     // Email field
@@ -205,19 +210,21 @@ fun AuthScreen(
                         onValueChange = { email = it },
                         label = { Text("Email Address") },
                         leadingIcon = {
-                            Icon(Icons.Default.Email, contentDescription = "Email")
+                            Icon(
+                                Icons.Default.Email,
+                                contentDescription = null
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF4CAF50),
-                            focusedLabelColor = Color(0xFF4CAF50)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Email,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
                         )
                     )
-
-                    Spacer(modifier = Modifier.height(20.dp))
 
                     // Password field
                     OutlinedTextField(
@@ -225,201 +232,161 @@ fun AuthScreen(
                         onValueChange = { password = it },
                         label = { Text("Password") },
                         leadingIcon = {
-                            Icon(Icons.Default.Lock, contentDescription = "Password")
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = null
+                            )
                         },
                         trailingIcon = {
-                            IconButton(onClick = { showPassword = !showPassword }) {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
-                                    if (showPassword) Icons.Default.VisibilityOff
-                                    else Icons.Default.Visibility,
-                                    contentDescription = if (showPassword) "Hide password" else "Show password"
+                                    if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
                                 )
                             }
                         },
-                        visualTransformation = if (showPassword) VisualTransformation.None
-                        else PasswordVisualTransformation(),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        singleLine = true,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF4CAF50),
-                            focusedLabelColor = Color(0xFF4CAF50)
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Password,
+                            imeAction = if (isLogin) ImeAction.Done else ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                            onDone = { 
+                                if (isLogin) {
+                                    authViewModel.signIn(email, password)
+                                }
+                            }
                         )
                     )
 
-                    // Confirm password field (only for registration)
-                    if (!isLoginMode) {
-                        Spacer(modifier = Modifier.height(20.dp))
-                        
+                    // Confirm password field (register only)
+                    if (!isLogin) {
                         OutlinedTextField(
                             value = confirmPassword,
                             onValueChange = { confirmPassword = it },
                             label = { Text("Confirm Password") },
                             leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = "Confirm Password")
+                                Icon(
+                                    Icons.Default.Lock,
+                                    contentDescription = null
+                                )
                             },
                             trailingIcon = {
-                                IconButton(onClick = { showConfirmPassword = !showConfirmPassword }) {
+                                IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                                     Icon(
-                                        if (showConfirmPassword) Icons.Default.VisibilityOff
-                                        else Icons.Default.Visibility,
-                                        contentDescription = if (showConfirmPassword) "Hide password" else "Show password"
+                                        if (confirmPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (confirmPasswordVisible) "Hide password" else "Show password"
                                     )
                                 }
                             },
-                            visualTransformation = if (showConfirmPassword) VisualTransformation.None
-                            else PasswordVisualTransformation(),
+                            visualTransformation = if (confirmPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = Color(0xFF4CAF50),
-                                focusedLabelColor = Color(0xFF4CAF50)
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                imeAction = ImeAction.Next
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onNext = { focusManager.moveFocus(FocusDirection.Down) }
                             )
                         )
+                    }
 
-                        Spacer(modifier = Modifier.height(24.dp))
-
-                        // Role selection with modern cards
+                    // Role selection (register only)
+                    if (!isLogin) {
                         Text(
-                            text = "Select Your Role",
+                            text = "Select Role",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A),
-                            modifier = Modifier.align(Alignment.Start)
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        UserRole.values().forEach { role ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (selectedRole == role) 
-                                        Color(0xFF4CAF50).copy(alpha = 0.1f) 
-                                    else 
-                                        Color(0xFFF5F5F5)
-                                ),
-                                onClick = { selectedRole = role }
-                            ) {
+                        
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            UserRole.values().forEach { role ->
                                 Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (selectedRole == role) {
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceVariant
+                                            },
+                                            RoundedCornerShape(12.dp)
+                                        )
+                                        .padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     RadioButton(
                                         selected = selectedRole == role,
-                                        onClick = { selectedRole = role },
-                                        colors = RadioButtonDefaults.colors(
-                                            selectedColor = Color(0xFF4CAF50)
-                                        )
+                                        onClick = { selectedRole = role }
                                     )
+                                    
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    
                                     Column {
                                         Text(
-                                            when (role) {
-                                                UserRole.ADMIN -> "Administrator"
-                                                UserRole.TPS -> "TPS Officer"
-                                                UserRole.DRIVER -> "Collection Driver"
-                                            },
+                                            text = role.displayName,
                                             style = MaterialTheme.typography.bodyLarge,
                                             fontWeight = FontWeight.Medium,
-                                            color = Color(0xFF1A1A1A)
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            when (role) {
-                                                UserRole.ADMIN -> "Manage system operations and users"
-                                                UserRole.TPS -> "Monitor TPS locations and status"
-                                                UserRole.DRIVER -> "Execute collection routes"
+                                            text = when (role) {
+                                                UserRole.DRIVER -> "Collect waste and manage routes"
+                                                UserRole.TPS_OFFICER -> "Monitor TPS status and manage collections"
+                                                UserRole.ADMIN -> "System administration and oversight"
                                             },
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF666666)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Error message
-                    val currentError = authState.error
-                    if (currentError != null) {
-                        ModernAlertCard(
-                            title = "Authentication Error",
-                            message = currentError,
-                            alertType = AlertType.ERROR
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                    }
-
-                    // Submit button
-                    Button(
-                        onClick = {
-                            if (isLoginMode) {
-                                authViewModel.signIn(email, password)
-                            } else {
-                                if (password == confirmPassword) {
-                                    authViewModel.signUp(email, password, name, selectedRole)
-                                } else {
-                                    // Show password mismatch error
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4CAF50)
-                        ),
-                        enabled = !authState.isLoading && email.isNotBlank() && password.isNotBlank() &&
-                                (isLoginMode || (name.isNotBlank() && password == confirmPassword))
-                    ) {
-                        if (authState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                "Processing...",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White
-                            )
-                        } else {
-                            Text(
-                                if (isLoginMode) "Sign In" else "Create Account",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
-
-                    if (isLoginMode) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        
-                        TextButton(
-                            onClick = {
-                                if (email.isNotBlank()) {
-                                    authViewModel.resetPassword(email)
-                                }
-                            }
-                        ) {
-                            Text(
-                                "Forgot your password?",
-                                color = Color(0xFF4CAF50),
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
                 }
+            }
+
+            // Error message
+            authState.error?.let { error ->
+                ModernMessageCard(
+                    message = error,
+                    type = MessageType.ERROR,
+                    onDismiss = { authViewModel.clearError() }
+                )
+            }
+
+            // Action button
+            ModernPrimaryButton(
+                text = if (isLogin) "Sign In" else "Create Account",
+                onClick = {
+                    if (isLogin) {
+                        authViewModel.signIn(email, password)
+                    } else {
+                        if (password == confirmPassword) {
+                            authViewModel.signUp(email, password, name, selectedRole)
+                        }
+                    }
+                },
+                isLoading = authState.isLoading,
+                enabled = email.isNotBlank() && password.isNotBlank() && 
+                         (isLogin || (name.isNotBlank() && password == confirmPassword)),
+                icon = if (isLogin) Icons.Default.Login else Icons.Default.PersonAdd
+            )
+
+            // Additional info for registration
+            if (!isLogin) {
+                ModernAlertCard(
+                    title = "Account Approval Required",
+                    message = "New accounts require admin approval before access is granted. You will be notified once your account is approved.",
+                    alertType = AlertType.INFO
+                )
             }
         }
     }

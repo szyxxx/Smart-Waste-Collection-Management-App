@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.bluebin.data.model.*
 import com.bluebin.data.repository.*
+import com.bluebin.presentation.driver.DriverLocation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ data class AdminDashboardUiState(
     val users: List<User> = emptyList(),
     val tpsLocations: List<TPS> = emptyList(),
     val schedules: List<Schedule> = emptyList(),
+    val activeDriverLocations: List<DriverLocation> = emptyList(),
     val error: String? = null,
     val message: String? = null,
     val stats: DashboardStats = DashboardStats()
@@ -53,6 +55,7 @@ class AdminDashboardViewModel @Inject constructor(
                 val usersResult = userRepository.getAllUsers()
                 val tpsResult = tpsRepository.getAllTPS()
                 val schedulesResult = scheduleRepository.getAllSchedules()
+                val activeDriverLocations = scheduleRepository.getAllActiveDriverLocations()
                 
                 val users = usersResult.getOrNull() ?: emptyList()
                 val tpsLocations = tpsResult.getOrNull() ?: emptyList()
@@ -65,6 +68,7 @@ class AdminDashboardViewModel @Inject constructor(
                     users = users,
                     tpsLocations = tpsLocations,
                     schedules = schedules,
+                    activeDriverLocations = activeDriverLocations,
                     stats = stats,
                     error = null
                 )
@@ -73,6 +77,19 @@ class AdminDashboardViewModel @Inject constructor(
                     isLoading = false,
                     error = "Failed to load dashboard data: ${e.message}"
                 )
+            }
+        }
+    }
+
+    fun refreshDriverLocations() {
+        viewModelScope.launch {
+            try {
+                val activeDriverLocations = scheduleRepository.getAllActiveDriverLocations()
+                _uiState.value = _uiState.value.copy(
+                    activeDriverLocations = activeDriverLocations
+                )
+            } catch (e: Exception) {
+                // Silently fail for location updates to not disrupt UI
             }
         }
     }
@@ -194,6 +211,22 @@ class AdminDashboardViewModel @Inject constructor(
 
     fun clearMessage() {
         _uiState.value = _uiState.value.copy(message = null, error = null)
+    }
+
+    fun seedSampleData() {
+        viewModelScope.launch {
+            try {
+                // This will trigger data seeding if needed
+                loadDashboardData()
+                _uiState.value = _uiState.value.copy(
+                    message = "Sample data loading initiated. Please refresh to see results."
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    error = "Failed to seed data: ${e.message}"
+                )
+            }
+        }
     }
 
     private fun calculateStats(users: List<User>, tpsLocations: List<TPS>, schedules: List<Schedule>): DashboardStats {

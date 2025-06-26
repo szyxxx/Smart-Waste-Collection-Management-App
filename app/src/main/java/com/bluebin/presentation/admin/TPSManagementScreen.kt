@@ -86,7 +86,9 @@ fun TPSManagementScreen(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    Column {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
                             text = "TPS Management",
                             style = MaterialTheme.typography.headlineMedium,
@@ -99,8 +101,6 @@ fun TPSManagementScreen(
                             color = Color(0xFF666666)
                         )
                     }
-                    
-                    Spacer(modifier = Modifier.weight(1f))
                     
                     IconButton(
                         onClick = { viewModel.loadDashboardData() },
@@ -180,7 +180,7 @@ fun TPSManagementScreen(
                     viewModel.assignOfficerToTPS(tpsId, officerId)
                 },
                 isLoading = uiState.isLoading,
-                availableOfficers = uiState.users.filter { it.role == UserRole.TPS && it.approved },
+                availableOfficers = uiState.users.filter { it.role == UserRole.TPS_OFFICER && it.approved },
                 isLoadingOfficers = uiState.isLoading
             )
             3 -> TPSAnalyticsTab(

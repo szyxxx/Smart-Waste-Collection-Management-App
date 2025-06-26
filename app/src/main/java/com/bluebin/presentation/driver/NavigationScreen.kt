@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalPermissionsApi::class)
+
 package com.bluebin.presentation.driver
 
 import android.Manifest
@@ -27,6 +29,7 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.awaitCancellation
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -106,6 +109,8 @@ fun NavigationScreen(
                 currentStop = currentStop,
                 allStops = currentRoute.stops,
                 currentStopIndex = currentStopIndex,
+                driverViewModel = driverViewModel,
+                locationPermissions = locationPermissions,
                 modifier = Modifier.fillMaxSize()
             )
             
@@ -161,6 +166,8 @@ private fun GoogleMapView(
     currentStop: RouteStop?,
     allStops: List<RouteStop>,
     currentStopIndex: Int,
+    driverViewModel: DriverViewModel,
+    locationPermissions: com.google.accompanist.permissions.MultiplePermissionsState,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -185,19 +192,76 @@ private fun GoogleMapView(
         position = CameraPosition.fromLatLngZoom(userLocation ?: currentStopLocation, 15f)
     }
     
-    // Get user's current location
+    // Get user's current location and start real-time tracking
     LaunchedEffect(Unit) {
         try {
             val location = fusedLocationClient.lastLocation.await()
             location?.let {
-                userLocation = LatLng(it.latitude, it.longitude)
+                val newLocation = LatLng(it.latitude, it.longitude)
+                userLocation = newLocation
                 cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngZoom(LatLng(it.latitude, it.longitude), 15f),
+                    CameraUpdateFactory.newLatLngZoom(newLocation, 15f),
                     1000
+                )
+                
+                // Update driver location in database for admin tracking
+                driverViewModel.updateLocation(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    speed = if (it.hasSpeed()) it.speed.toDouble() * 3.6 else 0.0, // Convert m/s to km/h
+                    heading = if (it.hasBearing()) it.bearing.toDouble() else 0.0
                 )
             }
         } catch (e: Exception) {
             // Handle permission or location errors
+        }
+    }
+    
+    // Set up real-time location updates
+    LaunchedEffect(currentStopIndex) {
+        if (locationPermissions.allPermissionsGranted) {
+            var locationCallback: LocationCallback? = null
+            try {
+                val locationRequest = LocationRequest.Builder(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    5000L // Update every 5 seconds
+                ).apply {
+                    setMinUpdateIntervalMillis(2000L) // Fastest update every 2 seconds
+                    setMaxUpdateDelayMillis(10000L) // Max delay 10 seconds
+                }.build()
+                
+                locationCallback = object : LocationCallback() {
+                    override fun onLocationResult(locationResult: LocationResult) {
+                        locationResult.lastLocation?.let { location ->
+                            val newLocation = LatLng(location.latitude, location.longitude)
+                            userLocation = newLocation
+                            
+                            // Update driver location in database for admin tracking
+                            driverViewModel.updateLocation(
+                                latitude = location.latitude,
+                                longitude = location.longitude,
+                                speed = if (location.hasSpeed()) location.speed.toDouble() * 3.6 else 0.0,
+                                heading = if (location.hasBearing()) location.bearing.toDouble() else 0.0
+                            )
+                        }
+                    }
+                }
+                
+                fusedLocationClient.requestLocationUpdates(
+                    locationRequest,
+                    locationCallback,
+                    null
+                )
+                
+                // Clean up when component is destroyed
+                kotlinx.coroutines.awaitCancellation()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+                throw e
+            } catch (e: SecurityException) {
+                Log.e("NavigationScreen", "Location permission denied", e)
+                locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+            }
         }
     }
     
@@ -282,11 +346,7 @@ private fun GoogleMapView(
                 state = MarkerState(position = position),
                 title = stop.name,
                 snippet = stop.address,
-                icon = when {
-                    isCurrentStop -> BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-                    isCompletedStop -> BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
-                    else -> BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)
-                }
+                icon = MapMarkerUtils.getRouteStopMarkerIcon(isCompletedStop, isCurrentStop)
             )
         }
         
@@ -723,4 +783,4 @@ private fun decodePolyline(encoded: String): List<LatLng> {
     return poly
 }
 
-  
+ 

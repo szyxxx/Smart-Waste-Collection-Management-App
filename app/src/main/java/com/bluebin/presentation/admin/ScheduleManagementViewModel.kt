@@ -172,7 +172,7 @@ class ScheduleManagementViewModel @Inject constructor(
                         
                         result.fold(
                             onSuccess = { scheduleId ->
-                                generatedCount++
+                                        generatedCount++
                                 Log.d(TAG, "Successfully generated and saved optimized schedule with ID: $scheduleId")
                             },
                             onFailure = { error ->
@@ -293,11 +293,11 @@ class ScheduleManagementViewModel @Inject constructor(
                         assignResult.fold(
                             onSuccess = {
                                 Log.d(TAG, "Driver assigned successfully")
-                                _uiState.value = _uiState.value.copy(
-                                    isLoading = false,
-                                    message = "Schedule approved and driver assigned successfully!"
-                                )
-                                loadSchedules()
+                                    _uiState.value = _uiState.value.copy(
+                                        isLoading = false,
+                                        message = "Schedule approved and driver assigned successfully!"
+                                    )
+                                    loadSchedules()
                             },
                             onFailure = { error ->
                                 Log.e(TAG, "Failed to assign driver after approval", error)
@@ -335,38 +335,38 @@ class ScheduleManagementViewModel @Inject constructor(
             val result = scheduleRepository.deleteSchedule(scheduleId)
             if (result) {
                 Log.d(TAG, "Successfully deleted schedule: $scheduleId")
-                
-                // Remove from both lists
-                val updatedPending = _uiState.value.pendingOptimizedSchedules.toMutableList()
-                val updatedAll = _uiState.value.optimizedSchedules.toMutableList()
-                
-                updatedPending.removeAll { it.scheduleId == scheduleId }
-                updatedAll.removeAll { it.scheduleId == scheduleId }
-                
-                // Also clear lastGeneratedSchedule if it matches
-                val updatedLastGenerated = if (_uiState.value.lastGeneratedSchedule?.scheduleId == scheduleId) {
-                    null
-                } else {
-                    _uiState.value.lastGeneratedSchedule
-                }
-                
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
+                    
+                    // Remove from both lists
+                    val updatedPending = _uiState.value.pendingOptimizedSchedules.toMutableList()
+                    val updatedAll = _uiState.value.optimizedSchedules.toMutableList()
+                    
+                    updatedPending.removeAll { it.scheduleId == scheduleId }
+                    updatedAll.removeAll { it.scheduleId == scheduleId }
+                    
+                    // Also clear lastGeneratedSchedule if it matches
+                    val updatedLastGenerated = if (_uiState.value.lastGeneratedSchedule?.scheduleId == scheduleId) {
+                        null
+                    } else {
+                        _uiState.value.lastGeneratedSchedule
+                    }
+                    
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
                     message = "Schedule deleted successfully!",
-                    pendingOptimizedSchedules = updatedPending,
-                    optimizedSchedules = updatedAll,
-                    lastGeneratedSchedule = updatedLastGenerated
-                )
-                
-                // Also reload to sync with database
-                loadSchedules()
+                        pendingOptimizedSchedules = updatedPending,
+                        optimizedSchedules = updatedAll,
+                        lastGeneratedSchedule = updatedLastGenerated
+                    )
+                    
+                    // Also reload to sync with database
+                    loadSchedules()
             } else {
                 Log.e(TAG, "Failed to delete schedule: $scheduleId")
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
                     error = "Failed to delete schedule"
-                )
-            }
+                    )
+                }
         }
     }
 

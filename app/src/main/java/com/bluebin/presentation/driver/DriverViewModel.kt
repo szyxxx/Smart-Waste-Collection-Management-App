@@ -34,7 +34,7 @@ class DriverViewModel @Inject constructor(
     val uiState: StateFlow<DriverUiState> = _uiState.asStateFlow()
 
     init {
-        Log.d(TAG, "DriverViewModel initialized - loading driver data")
+        Log.d(TAG, "DriverViewModel initialized")
         loadDriverData()
     }
 
@@ -47,34 +47,21 @@ class DriverViewModel @Inject constructor(
                 Log.d(TAG, "Loading driver data for user: $currentUserId")
                 
                 if (currentUserId != null) {
-                    // Load driver's assigned schedules using the working method
-                    Log.d(TAG, "Loading schedules directly by driver ID...")
+                    // Load driver's assigned schedules
                     val driverSchedules = try {
                         scheduleRepository.getSchedulesByDriver(currentUserId)
                     } catch (e: Exception) {
-                        Log.e(TAG, "Error loading schedules by driver ID", e)
+                        Log.e(TAG, "Error loading schedules", e)
                         emptyList<Schedule>()
                     }
                     
-                    Log.d(TAG, "Found ${driverSchedules.size} schedules for driver $currentUserId")
-                    
-                    // Debug: Print driver schedules
-                    driverSchedules.forEachIndexed { index, schedule ->
-                        Log.d(TAG, "Driver Schedule $index: ID=${schedule.scheduleId}, status=${schedule.status}, date=${schedule.date}")
-                        Log.d(TAG, "  - TPS Route size: ${schedule.tpsRoute.size}, Generation type: ${schedule.generationType}")
-                    }
+                    Log.d(TAG, "Found ${driverSchedules.size} schedules for driver")
                     
                     // Get current assigned schedule (ASSIGNED status)
                     val assignedSchedule = driverSchedules.find { it.status == ScheduleStatus.ASSIGNED }
-                    Log.d(TAG, "Assigned schedule: ${assignedSchedule?.scheduleId ?: "None"}")
                     
                     // Get current active route (IN_PROGRESS status)
                     val activeSchedule = driverSchedules.find { it.status == ScheduleStatus.IN_PROGRESS }
-                    Log.d(TAG, "Active schedule: ${activeSchedule?.scheduleId ?: "None"}")
-                    
-                    // Check for APPROVED schedules too (might be approved but not assigned yet)
-                    val approvedSchedules = driverSchedules.filter { it.status == ScheduleStatus.APPROVED }
-                    Log.d(TAG, "Approved schedules: ${approvedSchedules.size}")
                     
                     // Get today's schedules
                     val today = Calendar.getInstance()
@@ -85,7 +72,6 @@ class DriverViewModel @Inject constructor(
                         today.get(Calendar.YEAR) == scheduleDate.get(Calendar.YEAR) &&
                         today.get(Calendar.DAY_OF_YEAR) == scheduleDate.get(Calendar.DAY_OF_YEAR)
                     }
-                    Log.d(TAG, "Found ${todaySchedules.size} schedules for today")
                     
                     // Filter assigned schedules for UI - include APPROVED, ASSIGNED, and IN_PROGRESS
                     val assignedSchedulesForUI = driverSchedules.filter { 
@@ -93,20 +79,15 @@ class DriverViewModel @Inject constructor(
                         it.status == ScheduleStatus.ASSIGNED || 
                         it.status == ScheduleStatus.IN_PROGRESS 
                     }
-                    Log.d(TAG, "Assigned schedules for UI: ${assignedSchedulesForUI.size}")
                     
                     // Load TPS locations for route details
                     val allTPS = tpsRepository.getAllTPS().getOrNull() ?: emptyList()
-                    Log.d(TAG, "Loaded ${allTPS.size} TPS locations")
                     
                     // Generate route assignment from current schedule
-                    val currentSchedule = activeSchedule ?: assignedSchedule ?: approvedSchedules.firstOrNull()
+                    val currentSchedule = activeSchedule ?: assignedSchedule
                     val routeAssignment = currentSchedule?.let { schedule ->
-                        Log.d(TAG, "Generating route assignment for schedule: ${schedule.scheduleId}")
                         generateRouteAssignment(schedule, allTPS)
                     }
-                    
-                    Log.d(TAG, "Current route assignment: ${routeAssignment?.routeId}")
                     
                     // Generate daily stats
                     val dailyStats = generateDailyStats(todaySchedules, driverSchedules)
@@ -126,19 +107,19 @@ class DriverViewModel @Inject constructor(
                         error = null
                     )
                     
-                    Log.d(TAG, "Successfully loaded driver data - Current schedule: ${currentSchedule?.scheduleId}, Assigned schedules: ${assignedSchedulesForUI.size}")
+                    Log.d(TAG, "Successfully loaded driver data")
                 } else {
-                    Log.e(TAG, "Current user ID is null - user not authenticated")
+                    Log.e(TAG, "User not authenticated")
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "User not authenticated"
+                        error = "Please login to continue"
                     )
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading driver data", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Failed to load driver data"
+                    error = e.message ?: "Failed to load data"
                 )
             }
         }
@@ -168,24 +149,22 @@ class DriverViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             currentSchedule = updatedSchedule,
                             currentRoute = updatedRoute,
-                            message = "Schedule started successfully!"
+                            message = "Collection route started!"
                         )
-                        
-                        Log.d(TAG, "Schedule started successfully")
                         
                         // Start location tracking
                         startLocationTracking()
                         
                     } else {
                         _uiState.value = _uiState.value.copy(
-                            error = "Failed to start schedule"
+                            error = "Failed to start route"
                         )
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error starting schedule", e)
                 _uiState.value = _uiState.value.copy(
-                    error = e.message ?: "Failed to start schedule"
+                    error = e.message ?: "Failed to start route"
                 )
             }
         }
@@ -198,8 +177,6 @@ class DriverViewModel @Inject constructor(
                 val currentSchedule = _uiState.value.currentSchedule
                 
                 if (currentRoute != null && currentSchedule != null && stopIndex < currentRoute.stops.size) {
-                    Log.d(TAG, "Completing collection at stop $stopIndex")
-                    
                     val updatedStops = currentRoute.stops.toMutableList()
                     updatedStops[stopIndex] = updatedStops[stopIndex].copy(
                         isCompleted = true,
@@ -218,15 +195,14 @@ class DriverViewModel @Inject constructor(
                     )
                     
                     _uiState.value = _uiState.value.copy(
-                        currentRoute = updatedRoute
+                        currentRoute = updatedRoute,
+                        message = "Collection point completed!"
                     )
                     
                     // If all stops completed, finish the schedule
                     if (updatedRoute.status == RouteStatus.COMPLETED) {
                         finishSchedule(currentSchedule)
                     }
-                    
-                    Log.d(TAG, "Collection completed - Progress: ${updatedRoute.progress}%")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error completing collection", e)
@@ -263,7 +239,7 @@ class DriverViewModel @Inject constructor(
                     collectionRecords = updatedRecords,
                     currentRoute = null,
                     currentSchedule = null,
-                    message = "Schedule completed successfully!"
+                    message = "Route completed successfully!"
                 )
                 
                 // Stop location tracking
@@ -271,13 +247,11 @@ class DriverViewModel @Inject constructor(
                 
                 // Reload data to get new assignments
                 loadDriverData()
-                
-                Log.d(TAG, "Schedule finished successfully")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error finishing schedule", e)
             _uiState.value = _uiState.value.copy(
-                error = "Failed to complete schedule: ${e.message}"
+                error = "Failed to complete route: ${e.message}"
             )
         }
     }
@@ -287,8 +261,6 @@ class DriverViewModel @Inject constructor(
             try {
                 val currentRoute = _uiState.value.currentRoute
                 if (currentRoute != null && stopIndex < currentRoute.stops.size) {
-                    Log.d(TAG, "Reporting issue at stop $stopIndex: $issue")
-                    
                     val updatedStops = currentRoute.stops.toMutableList()
                     updatedStops[stopIndex] = updatedStops[stopIndex].copy(
                         hasIssue = true,
@@ -300,8 +272,6 @@ class DriverViewModel @Inject constructor(
                         currentRoute = updatedRoute,
                         message = "Issue reported successfully"
                     )
-                    
-                    // TODO: Send issue report to admin/backend
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error reporting issue", e)
@@ -317,8 +287,6 @@ class DriverViewModel @Inject constructor(
             try {
                 val currentSchedule = _uiState.value.currentSchedule
                 if (currentSchedule?.status == ScheduleStatus.IN_PROGRESS) {
-                    Log.d(TAG, "Updating location: lat=$latitude, lng=$longitude")
-                    
                     val locationUpdate = DriverLocation(
                         driverId = currentSchedule.driverId,
                         scheduleId = currentSchedule.scheduleId,
@@ -336,9 +304,6 @@ class DriverViewModel @Inject constructor(
                         _uiState.value = _uiState.value.copy(
                             currentLocation = locationUpdate
                         )
-                        Log.d(TAG, "Location updated successfully in database")
-                    } else {
-                        Log.e(TAG, "Failed to update location in database")
                     }
                 }
             } catch (e: Exception) {
@@ -372,7 +337,6 @@ class DriverViewModel @Inject constructor(
             isLocationTracking = false,
             currentLocation = null
         )
-        // TODO: Stop GPS location tracking
     }
 
     fun startNavigation() {
@@ -387,7 +351,7 @@ class DriverViewModel @Inject constructor(
     
     fun completeNavigation() {
         _uiState.value = _uiState.value.copy(isNavigationActive = false)
-        Log.d(TAG, "Navigation completed - returning to dashboard")
+        Log.d(TAG, "Navigation completed")
         // Refresh data to reflect route completion
         loadDriverData()
     }
@@ -400,13 +364,18 @@ class DriverViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(message = null)
     }
 
+    fun refreshData() {
+        Log.d(TAG, "Refreshing driver data")
+        loadDriverData()
+    }
+
     private fun generateRouteAssignment(schedule: Schedule, allTPS: List<TPS>): RouteAssignment {
         val stops = schedule.tpsRoute.mapIndexed { index, tpsId ->
             val tps = allTPS.find { it.tpsId == tpsId }
             RouteStop(
                 id = tpsId,
-                name = tps?.name ?: "TPS $tpsId",
-                address = tps?.address ?: "Unknown Address",
+                name = tps?.name ?: "Collection Point $tpsId",
+                address = tps?.address ?: "Address not available",
                 latitude = tps?.location?.latitude ?: 0.0,
                 longitude = tps?.location?.longitude ?: 0.0,
                 estimatedTime = "10:${String.format("%02d", index * 15)}",
@@ -477,162 +446,6 @@ class DriverViewModel @Inject constructor(
         val hours = duration / (60 * 60 * 1000)
         val minutes = (duration % (60 * 60 * 1000)) / (60 * 1000)
         return "${hours}h ${minutes}m"
-    }
-
-    fun refreshData() {
-        Log.d(TAG, "Manual refresh requested")
-        loadDriverData()
-    }
-
-    fun debugDriverInfo() {
-        viewModelScope.launch {
-            val currentUserId = authRepository.getCurrentUserId()
-            Log.d(TAG, "=== DRIVER DEBUG INFO ===")
-            Log.d(TAG, "Current User ID: $currentUserId")
-            Log.d(TAG, "Is User Logged In: ${authRepository.isUserLoggedIn()}")
-            
-            if (currentUserId != null) {
-                // Check if user exists in Firestore
-                val userResult = userRepository.getUserById(currentUserId)
-                userResult.fold(
-                    onSuccess = { user ->
-                        Log.d(TAG, "User found in Firestore: ${user?.name}, Role: ${user?.role}, Approved: ${user?.approved}")
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "User not found in Firestore", error)
-                    }
-                )
-                
-                // Check schedules directly
-                val allSchedules = scheduleRepository.getAllSchedules()
-                val assignedToDriver = allSchedules.filter { it.driverId == currentUserId }
-                Log.d(TAG, "Total schedules: ${allSchedules.size}, Assigned to driver: ${assignedToDriver.size}")
-                
-                assignedToDriver.forEach { schedule ->
-                    Log.d(TAG, "Assigned Schedule: ${schedule.scheduleId}, Status: ${schedule.status}, Date: ${schedule.date}")
-                }
-            }
-            Log.d(TAG, "=== END DEBUG INFO ===")
-        }
-    }
-
-    fun testDriverScheduleAccess() {
-        viewModelScope.launch {
-            Log.d(TAG, "=== COMPREHENSIVE DRIVER SCHEDULE TEST ===")
-            
-            // 1. Check current user authentication
-            val currentUserId = authRepository.getCurrentUserId()
-            val isLoggedIn = authRepository.isUserLoggedIn()
-            Log.d(TAG, "1. Authentication - User ID: $currentUserId, Logged in: $isLoggedIn")
-            
-            if (currentUserId == null) {
-                Log.e(TAG, "ERROR: User not authenticated!")
-                _uiState.value = _uiState.value.copy(error = "User not authenticated")
-                return@launch
-            }
-            
-            // 2. Check user profile and approval status
-            try {
-                val userResult = userRepository.getUserById(currentUserId)
-                userResult.fold(
-                    onSuccess = { user ->
-                        Log.d(TAG, "2. User Profile - Name: ${user?.name}, Role: ${user?.role}, Approved: ${user?.approved}")
-                        if (user?.approved != true) {
-                            Log.e(TAG, "ERROR: User not approved!")
-                            _uiState.value = _uiState.value.copy(error = "User account not approved by admin")
-                            return@launch
-                        }
-                        if (user.role != UserRole.DRIVER) {
-                            Log.e(TAG, "ERROR: User is not a driver! Role: ${user.role}")
-                            _uiState.value = _uiState.value.copy(error = "User is not a driver")
-                            return@launch
-                        }
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "ERROR: Cannot get user profile", error)
-                        _uiState.value = _uiState.value.copy(error = "Cannot access user profile: ${error.message}")
-                        return@launch
-                    }
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "ERROR: Exception getting user profile", e)
-                _uiState.value = _uiState.value.copy(error = "Error accessing user profile")
-                return@launch
-            }
-            
-            // 3. Test direct schedule access by driver ID
-            try {
-                Log.d(TAG, "3. Testing direct schedule access by driver ID...")
-                val driverSchedules = scheduleRepository.getSchedulesByDriver(currentUserId)
-                Log.d(TAG, "3. Direct query returned ${driverSchedules.size} schedules")
-                
-                driverSchedules.forEachIndexed { index, schedule ->
-                    Log.d(TAG, "   Schedule $index: ${schedule.scheduleId}, Status: ${schedule.status}, Date: ${schedule.date}")
-                }
-                
-                if (driverSchedules.isNotEmpty()) {
-                    Log.d(TAG, "SUCCESS: Found schedules with direct query!")
-                    
-                    // Update UI with found schedules
-                    val assignedSchedules = driverSchedules.filter { 
-                        it.status == ScheduleStatus.APPROVED ||
-                        it.status == ScheduleStatus.ASSIGNED || 
-                        it.status == ScheduleStatus.IN_PROGRESS 
-                    }
-                    
-                    _uiState.value = _uiState.value.copy(
-                        assignedSchedules = assignedSchedules,
-                        currentSchedule = assignedSchedules.firstOrNull(),
-                        error = null,
-                        message = "Found ${assignedSchedules.size} schedules using direct query"
-                    )
-                    
-                    Log.d(TAG, "=== TEST COMPLETED SUCCESSFULLY ===")
-                    return@launch
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "ERROR: Direct schedule query failed", e)
-            }
-            
-            // 4. Test general schedule access (admin-level)
-            try {
-                Log.d(TAG, "4. Testing general schedule access...")
-                val allSchedules = scheduleRepository.getAllSchedules()
-                Log.d(TAG, "4. General query returned ${allSchedules.size} total schedules")
-                
-                // Look for schedules that should belong to this driver
-                val shouldBeDriverSchedules = allSchedules.filter { it.driverId == currentUserId }
-                Log.d(TAG, "4. Found ${shouldBeDriverSchedules.size} schedules with matching driver ID")
-                
-                shouldBeDriverSchedules.forEachIndexed { index, schedule ->
-                    Log.d(TAG, "   Matching Schedule $index: ${schedule.scheduleId}, Status: ${schedule.status}")
-                    Log.d(TAG, "     Driver ID: ${schedule.driverId} (matches: ${schedule.driverId == currentUserId})")
-                }
-                
-                if (shouldBeDriverSchedules.isNotEmpty()) {
-                    Log.d(TAG, "POTENTIAL ISSUE: Schedules exist but driver query doesn't return them!")
-                    Log.d(TAG, "This suggests a Firestore security rules issue.")
-                }
-                
-            } catch (e: Exception) {
-                Log.e(TAG, "ERROR: General schedule query failed", e)
-                Log.e(TAG, "This confirms Firestore permission issues")
-            }
-            
-            // 5. Check if there are any schedules in the database at all
-            try {
-                Log.d(TAG, "5. Checking if any schedules exist...")
-                // This would require admin access to see all schedules
-                // If this fails, it means there are no schedules or permission issues
-            } catch (e: Exception) {
-                Log.e(TAG, "5. Cannot access schedule database", e)
-            }
-            
-            Log.d(TAG, "=== COMPREHENSIVE TEST COMPLETED ===")
-            _uiState.value = _uiState.value.copy(
-                error = "No schedules found. Check admin dashboard to ensure schedules are assigned to driver ID: $currentUserId"
-            )
-        }
     }
 }
 

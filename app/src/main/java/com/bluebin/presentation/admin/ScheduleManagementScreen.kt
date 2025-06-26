@@ -371,37 +371,37 @@ private fun PendingApprovalTab(
     uiState: ScheduleManagementUiState,
     viewModel: ScheduleManagementViewModel
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    ModernSectionHeader(
-                        title = "Pending Approval",
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        ModernSectionHeader(
+                            title = "Pending Approval",
                         subtitle = if (uiState.isLoading) {
                             "Loading schedules..."
                         } else {
                             "${uiState.pendingOptimizedSchedules.size} schedules awaiting your approval"
                         }
-                    )
-                }
-                
-                IconButton(
+                        )
+                    }
+                    
+                    IconButton(
                     onClick = { viewModel.refreshAllData() }
-                ) {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Refresh",
-                        tint = Color(0xFF4CAF50)
-                    )
-                }
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = Color(0xFF4CAF50)
+                        )
+                    }
                 
                 // Debug button (remove in production)
                 IconButton(
@@ -554,26 +554,26 @@ private fun OptimizedScheduleCard(
             // Route segments preview
             schedule.optimizationData?.let { optimizationData ->
                 if (optimizationData.routeSegments.isNotEmpty()) {
-                    Text(
-                        "Optimized Route",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1A1A1A)
-                    )
-                    
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                Text(
+                    "Optimized Route",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF1A1A1A)
+                )
+                
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                         optimizationData.routeSegments.take(3).forEach { segment ->
-                            RouteSegmentItem(segment)
-                        }
+                        RouteSegmentItem(segment)
+                    }
                         if (optimizationData.routeSegments.size > 3) {
-                            Text(
+                        Text(
                                 "+${optimizationData.routeSegments.size - 3} more segments",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF666666),
-                                modifier = Modifier.padding(start = 32.dp)
-                            )
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666),
+                            modifier = Modifier.padding(start = 32.dp)
+                        )
                         }
                     }
                 }
@@ -1041,12 +1041,13 @@ private fun ScheduleAnalyticsTab(
                 )
             }
 
-            // Regular Schedules Overview
+            // Combined Schedule Overview
             item {
                 ModernCard {
                     Column(
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
+                        verticalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
+                        // Header
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -1061,7 +1062,7 @@ private fun ScheduleAnalyticsTab(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    Icons.Default.Schedule,
+                                    Icons.Default.Analytics,
                                     contentDescription = null,
                                     modifier = Modifier.size(24.dp),
                                     tint = Color(0xFF2196F3)
@@ -1070,142 +1071,119 @@ private fun ScheduleAnalyticsTab(
                             
                             Column {
                                 Text(
-                                    "Regular Schedules",
+                                    "Schedule Overview",
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF1A1A1A)
                                 )
                                 Text(
-                                    "Manual and converted schedule tracking",
+                                    "Regular and AI-optimized schedule analytics",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color(0xFF666666)
                                 )
                             }
                         }
                         
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        // Regular Schedules Section
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            AnalyticsCard(
-                                title = "Total",
-                                value = stats.totalSchedules.toString(),
-                                icon = Icons.Default.Schedule,
-                                color = Color(0xFF2196F3),
-                                modifier = Modifier.weight(1f)
-                            )
-                            AnalyticsCard(
-                                title = "Pending",
-                                value = stats.pendingSchedules.toString(),
-                                icon = Icons.Default.PendingActions,
-                                color = Color(0xFFFF9800),
-                                modifier = Modifier.weight(1f)
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color(0xFF2196F3)
+                                )
+                                Text(
+                                    "Regular Schedules",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF1A1A1A)
+                                )
+                            }
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                AnalyticsCard(
+                                    title = "Total",
+                                    value = stats.totalSchedules.toString(),
+                                    icon = Icons.Default.Schedule,
+                                    color = Color(0xFF2196F3),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                AnalyticsCard(
+                                    title = "Active",
+                                    value = stats.activeSchedules.toString(),
+                                    icon = Icons.Default.PlayArrow,
+                                    color = Color(0xFF4CAF50),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                AnalyticsCard(
+                                    title = "Completed",
+                                    value = stats.completedSchedules.toString(),
+                                    icon = Icons.Default.CheckCircle,
+                                    color = Color(0xFF8BC34A),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                         }
                         
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        HorizontalDivider(color = Color(0xFFE0E0E0))
+                        
+                        // AI-Optimized Schedules Section
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            AnalyticsCard(
-                                title = "Active",
-                                value = stats.activeSchedules.toString(),
-                                icon = Icons.Default.PlayArrow,
-                                color = Color(0xFF4CAF50),
-                                modifier = Modifier.weight(1f)
-                            )
-                            AnalyticsCard(
-                                title = "Completed",
-                                value = stats.completedSchedules.toString(),
-                                icon = Icons.Default.CheckCircle,
-                                color = Color(0xFF8BC34A),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Optimized Schedules Overview
-            item {
-                ModernCard {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .background(
-                                        Color(0xFF4CAF50).copy(alpha = 0.1f),
-                                        RoundedCornerShape(12.dp)
-                                    ),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     Icons.Default.AutoAwesome,
                                     contentDescription = null,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(20.dp),
                                     tint = Color(0xFF4CAF50)
+                                )
+                                Text(
+                                    "AI-Optimized Schedules",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF1A1A1A)
                                 )
                             }
                             
-                            Column {
-                                Text(
-                                    "AI-Optimized Schedules",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF1A1A1A)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                AnalyticsCard(
+                                    title = "Generated",
+                                    value = stats.totalOptimizedSchedules.toString(),
+                                    icon = Icons.Default.AutoAwesome,
+                                    color = Color(0xFF4CAF50),
+                                    modifier = Modifier.weight(1f)
                                 )
-                                Text(
-                                    "Generated and processed AI schedules",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF666666)
+                                AnalyticsCard(
+                                    title = "Assigned",
+                                    value = stats.assignedOptimizedSchedules.toString(),
+                                    icon = Icons.Default.Assignment,
+                                    color = Color(0xFF2196F3),
+                                    modifier = Modifier.weight(1f)
+                                )
+                                AnalyticsCard(
+                                    title = "Completed",
+                                    value = stats.completedOptimizedSchedules.toString(),
+                                    icon = Icons.Default.TaskAlt,
+                                    color = Color(0xFF8BC34A),
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            AnalyticsCard(
-                                title = "Generated",
-                                value = stats.totalOptimizedSchedules.toString(),
-                                icon = Icons.Default.AutoAwesome,
-                                color = Color(0xFF4CAF50),
-                                modifier = Modifier.weight(1f)
-                            )
-                            AnalyticsCard(
-                                title = "Pending",
-                                value = stats.pendingOptimizedSchedules.toString(),
-                                icon = Icons.Default.HourglassEmpty,
-                                color = Color(0xFFFF9800),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            AnalyticsCard(
-                                title = "Assigned",
-                                value = stats.assignedOptimizedSchedules.toString(),
-                                icon = Icons.Default.Assignment,
-                                color = Color(0xFF2196F3),
-                                modifier = Modifier.weight(1f)
-                            )
-                            AnalyticsCard(
-                                title = "Completed",
-                                value = stats.completedOptimizedSchedules.toString(),
-                                icon = Icons.Default.TaskAlt,
-                                color = Color(0xFF8BC34A),
-                                modifier = Modifier.weight(1f)
-                            )
                         }
                     }
                 }

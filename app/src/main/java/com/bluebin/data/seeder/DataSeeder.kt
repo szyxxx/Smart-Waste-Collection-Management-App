@@ -67,7 +67,7 @@ class DataSeeder @Inject constructor(
                 uid = "tps_001",
                 name = "Budi Santoso",
                 email = "budi.tps@bluebin.com",
-                role = UserRole.TPS,
+                role = UserRole.TPS_OFFICER,
                 approved = true,
                 createdAt = System.currentTimeMillis() - 86400000L * 25
             ),
@@ -75,7 +75,7 @@ class DataSeeder @Inject constructor(
                 uid = "tps_002",
                 name = "Sari Indah",
                 email = "sari.tps@bluebin.com", 
-                role = UserRole.TPS,
+                role = UserRole.TPS_OFFICER,
                 approved = true,
                 createdAt = System.currentTimeMillis() - 86400000L * 22
             ),
@@ -83,7 +83,7 @@ class DataSeeder @Inject constructor(
                 uid = "tps_003",
                 name = "Ahmad Wijaya",
                 email = "ahmad.tps@bluebin.com",
-                role = UserRole.TPS,
+                role = UserRole.TPS_OFFICER,
                 approved = true,
                 createdAt = System.currentTimeMillis() - 86400000L * 18
             ),
@@ -91,7 +91,7 @@ class DataSeeder @Inject constructor(
                 uid = "tps_004",
                 name = "Maya Putri",
                 email = "maya.tps@bluebin.com",
-                role = UserRole.TPS,
+                role = UserRole.TPS_OFFICER,
                 approved = false, // Pending approval
                 createdAt = System.currentTimeMillis() - 86400000L * 5
             )

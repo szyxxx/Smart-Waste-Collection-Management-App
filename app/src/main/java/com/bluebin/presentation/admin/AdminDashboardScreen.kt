@@ -21,11 +21,11 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bluebin.presentation.auth.AuthViewModel
+import com.bluebin.presentation.driver.DriverLocation
 import com.bluebin.ui.components.*
 import com.bluebin.ui.theme.*
 import com.google.android.gms.maps.model.CameraPosition
@@ -45,7 +45,6 @@ enum class AdminDestination(
     SCHEDULE_MANAGEMENT("Schedule Management", Icons.Default.Schedule, "Create and manage collection schedules")
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
     onNavigateToAuth: () -> Unit,
@@ -55,8 +54,16 @@ fun AdminDashboardScreen(
     val authState by authViewModel.authState.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
     var currentDestination by remember { mutableStateOf<AdminDestination?>(null) }
+    
+    // Auto-refresh driver locations every 10 seconds for real-time tracking
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(10000L) // 10 seconds
+            dashboardViewModel.refreshDriverLocations()
+        }
+    }
 
-    // Handle navigation back to main dashboard
+    // Handle navigation to sub-screens
     currentDestination?.let { destination ->
         when (destination) {
             AdminDestination.ANALYTICS -> {
@@ -97,201 +104,94 @@ fun AdminDashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF8F9FA))
+                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
-            // Modern Header with full top bar
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xFF4CAF50),
-                                Color(0xFF45A049)
-                            )
-                        )
-                    )
-                    .statusBarsPadding()
-            ) {
-                Column {
-                    // Top status bar
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Admin Dashboard",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { dashboardViewModel.loadDashboardData() },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                            ) {
-                                Icon(
-                                    Icons.Default.Refresh, 
-                                    contentDescription = "Refresh",
-                                    tint = Color.White
-                                )
-                            }
-                            
-                            IconButton(
-                                onClick = { authViewModel.signOut() },
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Color.White.copy(alpha = 0.2f), CircleShape)
-                            ) {
-                                Icon(
-                                    Icons.Default.ExitToApp, 
-                                    contentDescription = "Logout",
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Welcome section
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp)
-                            .padding(bottom = 24.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Welcome back, ${authState.user?.name ?: "Admin"}",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                            Text(
-                                text = "Real-time driver tracking and system monitoring",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
-                        }
-                        
-                        Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .background(
-                                    Color.White.copy(alpha = 0.2f),
-                                    RoundedCornerShape(16.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(text = "🗺️", fontSize = 24.sp)
-                        }
-                    }
-                }
-            }
+            // Modern Header with gradient
+            ModernAdminHeader(
+                userName = authState.user?.name ?: "Admin",
+                onRefresh = { dashboardViewModel.loadDashboardData() },
+                onLogout = { authViewModel.signOut() }
+            )
 
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(24.dp),
+                contentPadding = PaddingValues(20.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                // Real-time Driver Tracking Map
+                // Real-time tracking section
                 item {
-                    Text(
-                        text = "Real-time Driver Tracking",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
+                    ModernSectionHeader(
+                        title = "Real-time Driver Tracking",
+                        subtitle = "Monitor active collection routes"
                     )
                 }
 
                 item {
                     RealTimeDriverTrackingMap(
                         dashboardState = dashboardState,
-                        onRefresh = { dashboardViewModel.loadDashboardData() }
+                        onRefresh = { 
+                            dashboardViewModel.loadDashboardData()
+                            dashboardViewModel.refreshDriverLocations()
+                        }
                     )
                 }
 
-                // Quick Stats
+                // System overview section
+                item {
+                    ModernSectionHeader(
+                        title = "System Overview",
+                        subtitle = "Key performance metrics"
+                    )
+                }
+
                 if (dashboardState.isLoading) {
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color(0xFF4CAF50)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                "Loading dashboard data...",
-                                color = Color(0xFF666666)
-                            )
-                        }
+                        ModernLoadingIndicator(message = "Loading dashboard data...")
                     }
                 } else {
-                    item {
-                        Text(
-                            text = "System Overview",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A)
-                        )
-                    }
-                    
                     item {
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(16.dp),
                             contentPadding = PaddingValues(vertical = 8.dp)
                         ) {
                             item {
-                                ModernStatCard(
+                                ModernMetricCard(
                                     title = "Active Drivers",
                                     value = dashboardState.stats.activeSchedules.toString(),
                                     subtitle = "Currently on routes",
                                     icon = Icons.Default.LocalShipping,
-                                    color = Color(0xFF4CAF50),
+                                    color = MaterialTheme.colorScheme.primary,
                                     onClick = { currentDestination = AdminDestination.SCHEDULE_MANAGEMENT }
                                 )
                             }
                             item {
-                                ModernStatCard(
+                                ModernMetricCard(
                                     title = "TPS Locations",
                                     value = dashboardState.stats.totalTPS.toString(),
                                     subtitle = "${dashboardState.stats.fullTPS} at capacity",
                                     icon = Icons.Default.LocationOn,
-                                    color = if (dashboardState.stats.fullTPS > 0) Color(0xFFFF5722) else Color(0xFF4CAF50),
+                                    color = if (dashboardState.stats.fullTPS > 0) ErrorColor else SuccessColor,
                                     onClick = { currentDestination = AdminDestination.TPS_MANAGEMENT }
                                 )
                             }
                             item {
-                                ModernStatCard(
+                                ModernMetricCard(
                                     title = "Total Users",
                                     value = dashboardState.stats.totalUsers.toString(),
                                     subtitle = "${dashboardState.stats.pendingApprovals} pending approval",
                                     icon = Icons.Default.People,
-                                    color = Color(0xFF2196F3),
+                                    color = InfoColor,
                                     onClick = { currentDestination = AdminDestination.USER_MANAGEMENT }
                                 )
                             }
                             item {
-                                ModernStatCard(
+                                ModernMetricCard(
                                     title = "Completed Today",
                                     value = dashboardState.stats.completedToday.toString(),
                                     subtitle = "Collection routes",
                                     icon = Icons.Default.CheckCircle,
-                                    color = Color(0xFF9C27B0),
+                                    color = SuccessColor,
                                     onClick = { currentDestination = AdminDestination.ANALYTICS }
                                 )
                             }
@@ -302,11 +202,9 @@ fun AdminDashboardScreen(
                 // Alerts section
                 if (dashboardState.stats.pendingApprovals > 0 || dashboardState.stats.fullTPS > 0) {
                     item {
-                        Text(
-                            text = "Requires Attention",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A)
+                        ModernSectionHeader(
+                            title = "Requires Attention",
+                            subtitle = "Critical system alerts"
                         )
                     }
                     
@@ -337,12 +235,125 @@ fun AdminDashboardScreen(
 }
 
 @Composable
+private fun ModernAdminHeader(
+    userName: String,
+    onRefresh: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                )
+            )
+    ) {
+        Column {
+            // Status bar spacer
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Admin Dashboard",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh, 
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                    
+                    IconButton(
+                        onClick = onLogout,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.ExitToApp, 
+                            contentDescription = "Logout",
+                            tint = MaterialTheme.colorScheme.onPrimary
+                        )
+                    }
+                }
+            }
+            
+            // Welcome section
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Welcome back, $userName",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                    )
+                    Text(
+                        text = "Real-time system monitoring and management",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                    )
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                            RoundedCornerShape(16.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(text = "🗺️", fontSize = 24.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AdminBottomNavigationBar(
     onDestinationSelected: (AdminDestination) -> Unit
 ) {
     NavigationBar(
-        containerColor = Color.White,
-        contentColor = Color(0xFF4CAF50),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary,
         modifier = Modifier.height(80.dp)
     ) {
         AdminDestination.values().forEach { destination ->
@@ -370,11 +381,11 @@ private fun AdminBottomNavigationBar(
                 selected = false,
                 onClick = { onDestinationSelected(destination) },
                 colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF4CAF50),
-                    selectedTextColor = Color(0xFF4CAF50),
-                    unselectedIconColor = Color(0xFF666666),
-                    unselectedTextColor = Color(0xFF666666),
-                    indicatorColor = Color(0xFF4CAF50).copy(alpha = 0.12f)
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 )
             )
         }
@@ -392,13 +403,8 @@ private fun RealTimeDriverTrackingMap(
         position = CameraPosition.fromLatLngZoom(defaultPosition, 12f)
     }
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(400.dp),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ModernCard(
+        modifier = Modifier.height(400.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -407,7 +413,7 @@ private fun RealTimeDriverTrackingMap(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .padding(bottom = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -416,29 +422,30 @@ private fun RealTimeDriverTrackingMap(
                         text = "Live Driver Locations",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Text(
-                        text = "${dashboardState.stats.activeSchedules} drivers active",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF666666)
-                    )
+                                    Text(
+                    text = "${dashboardState.activeDriverLocations.size} drivers live • ${dashboardState.stats.activeSchedules} active routes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 }
                 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Live indicator
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .background(Color(0xFF4CAF50), CircleShape)
+                            .background(SuccessColor, CircleShape)
                     )
                     Text(
                         "LIVE",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF4CAF50)
+                        color = SuccessColor
                     )
                     
                     IconButton(
@@ -449,7 +456,7 @@ private fun RealTimeDriverTrackingMap(
                             Icons.Default.Refresh,
                             contentDescription = "Refresh",
                             modifier = Modifier.size(16.dp),
-                            tint = Color(0xFF666666)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -459,8 +466,6 @@ private fun RealTimeDriverTrackingMap(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp, vertical = 0.dp)
-                    .padding(bottom = 20.dp)
                     .clip(RoundedCornerShape(12.dp))
             ) {
                 GoogleMap(
@@ -476,213 +481,87 @@ private fun RealTimeDriverTrackingMap(
                         myLocationButtonEnabled = false
                     )
                 ) {
-                                         // Add TPS markers
-                     dashboardState.tpsLocations.forEach { tps ->
-                         Marker(
-                             state = MarkerState(
-                                 position = LatLng(
-                                     tps.location.latitude,
-                                     tps.location.longitude
-                                 )
-                             ),
-                             title = tps.name,
-                             snippet = "Status: ${tps.status.name}"
-                         )
-                     }
-                                         
-                     // Add sample driver markers (in a real app, this would be real-time driver locations)
-                     if (dashboardState.stats.activeSchedules > 0) {
-                         // Sample driver positions for demonstration
-                         val sampleDriverPositions = listOf(
-                             LatLng(-6.9147, 107.6098) to "Driver 1",
-                             LatLng(-6.9200, 107.6150) to "Driver 2",
-                             LatLng(-6.9100, 107.6250) to "Driver 3"
-                         ).take(dashboardState.stats.activeSchedules)
-                         
-                         sampleDriverPositions.forEach { (position, driverName) ->
-                             Marker(
-                                 state = MarkerState(position = position),
-                                 title = driverName,
-                                 snippet = "On active route"
-                             )
-                         }
-                     }
+                    // Add TPS markers with different icons based on status
+                    dashboardState.tpsLocations.forEach { tps ->
+                        val isFull = tps.status.name == "PENUH"
+                        Marker(
+                            state = MarkerState(
+                                position = LatLng(
+                                    tps.location.latitude,
+                                    tps.location.longitude
+                                )
+                            ),
+                            title = tps.name,
+                            snippet = "Status: ${tps.status.name}${if (isFull) " ⚠️" else " ✅"}",
+                            icon = MapMarkerUtils.getTpsMarkerIcon(isFull)
+                        )
+                    }
+                    
+                    // Add real driver markers with driver icon
+                    dashboardState.activeDriverLocations.forEach { driverLocation ->
+                        // Calculate how long ago the location was updated
+                        val minutesAgo = (System.currentTimeMillis() - driverLocation.timestamp) / (60 * 1000)
+                        val timeAgo = when {
+                            minutesAgo < 1 -> "Just now"
+                            minutesAgo < 60 -> "${minutesAgo}m ago"
+                            else -> "${minutesAgo / 60}h ago"
+                        }
+                        
+                        // Find driver name from users list
+                        val driverUser = dashboardState.users.find { it.uid == driverLocation.driverId }
+                        val driverName = driverUser?.name ?: "Driver ${driverLocation.driverId.take(6)}"
+                        
+                        Marker(
+                            state = MarkerState(
+                                position = LatLng(
+                                    driverLocation.latitude,
+                                    driverLocation.longitude
+                                )
+                            ),
+                            title = "🚛 $driverName",
+                            snippet = "Live tracking • Updated $timeAgo${if (driverLocation.speed > 0) " • ${String.format("%.1f", driverLocation.speed)} km/h" else ""}",
+                            icon = MapMarkerUtils.getDriverMarkerIcon()
+                        )
+                    }
                 }
                 
-                // Map overlay with driver info
-                if (dashboardState.stats.activeSchedules == 0) {
+                // Empty state overlay
+                if (dashboardState.activeDriverLocations.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Card(
+                        ModernCard(
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.White.copy(alpha = 0.9f)
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                             )
                         ) {
                             Column(
-                                modifier = Modifier.padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Icon(
                                     Icons.Default.LocationOff,
                                     contentDescription = null,
                                     modifier = Modifier.size(32.dp),
-                                    tint = Color(0xFF666666)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     "No Active Drivers",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Medium,
-                                    color = Color(0xFF1A1A1A)
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    "All drivers have completed their routes",
+                                    "No active drivers with live location tracking",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF666666)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
-                                 }
-             }
-         }
-     }
-}
-
-// ... existing code for other composables (ModernStatCard, ModernAlertCard, etc.) ...
-
-@Composable
-private fun ModernStatCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier
-            .width(200.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(color.copy(alpha = 0.1f), RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp),
-                        tint = color
-                    )
                 }
-                
-                Text(
-                    text = value,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1A1A1A)
-                )
-            }
-            
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1A1A1A)
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF666666)
-                )
             }
         }
     }
 }
-
-@Composable
-private fun ModernAlertCard(
-    title: String,
-    message: String,
-    alertType: AlertType,
-    onClick: (() -> Unit)? = null
-) {
-    val (backgroundColor, iconColor, icon) = when (alertType) {
-        AlertType.WARNING -> Triple(Color(0xFFFFF3E0), Color(0xFFFF9800), Icons.Default.Warning)
-        AlertType.ERROR -> Triple(Color(0xFFFFEBEE), Color(0xFFD32F2F), Icons.Default.Error)
-        AlertType.SUCCESS -> Triple(Color(0xFFE8F5E8), Color(0xFF4CAF50), Icons.Default.CheckCircle)
-        AlertType.INFO -> Triple(Color(0xFFE3F2FD), Color(0xFF2196F3), Icons.Default.Info)
-    }
-    
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(iconColor.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = iconColor
-                )
-            }
-            
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1A1A1A)
-                )
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF666666)
-                )
-            }
-            
-            if (onClick != null) {
-                Icon(
-                    Icons.Default.ArrowForward,
-                    contentDescription = "Go",
-                    modifier = Modifier.size(20.dp),
-                    tint = Color(0xFF999999)
-                )
-            }
-        }
-    }
-}
-
- 

@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bluebin.data.model.User
@@ -72,7 +73,9 @@ fun UserManagementScreen(
                     
                     Spacer(modifier = Modifier.width(16.dp))
                     
-                    Column {
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
                             text = "User Management",
                             style = MaterialTheme.typography.headlineMedium,
@@ -86,19 +89,36 @@ fun UserManagementScreen(
                         )
                     }
                     
-                    Spacer(modifier = Modifier.weight(1f))
+
                     
-                    IconButton(
-                        onClick = { viewModel.loadDashboardData() },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
+                        IconButton(
+                            onClick = { viewModel.loadDashboardData() },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFF5F5F5), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Refresh",
+                                tint = Color(0xFF666666)
+                            )
+                        }
+                        
+                        IconButton(
+                            onClick = { viewModel.seedSampleData() },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Color(0xFFE3F2FD), CircleShape)
+                        ) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = "Seed Data",
+                                tint = Color(0xFF2196F3)
+                            )
+                        }
                     }
                 }
 
@@ -281,13 +301,52 @@ private fun AllUsersTab(
     users: List<User>,
     isLoading: Boolean
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(users) { user ->
-            UserCard(user = user)
+    if (users.isEmpty() && !isLoading) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.padding(40.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(Color(0xFF2196F3).copy(alpha = 0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.People,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        tint = Color(0xFF2196F3)
+                    )
+                }
+                Text(
+                    "No Users Found",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    "Users will appear here once they register in the system",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(users) { user ->
+                UserCard(user = user)
+            }
         }
     }
 }
@@ -319,16 +378,38 @@ private fun UserStatisticsTab(
             ) {
                 StatCard(
                     title = "Total Users",
-                    value = stats.totalUsers.toString(),
+                    value = users.size.toString(),
                     icon = Icons.Default.People,
                     color = Color(0xFF2196F3),
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     title = "Pending",
-                    value = stats.pendingApprovals.toString(),
+                    value = users.count { !it.approved }.toString(),
                     icon = Icons.Default.Schedule,
                     color = Color(0xFFFF9800),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    title = "Approved",
+                    value = users.count { it.approved }.toString(),
+                    icon = Icons.Default.CheckCircle,
+                    color = Color(0xFF4CAF50),
+                    modifier = Modifier.weight(1f)
+                )
+                StatCard(
+                    title = "TPS Officers",
+                    value = users.count { it.role == UserRole.TPS_OFFICER }.toString(),
+                    icon = Icons.Default.Business,
+                    color = Color(0xFF9C27B0),
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -457,7 +538,7 @@ private fun PendingUserCard(
                             Icon(
                                 when (user.role) {
                                     UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                                    UserRole.TPS -> Icons.Default.Business
+                                    UserRole.TPS_OFFICER -> Icons.Default.Business
                                     UserRole.DRIVER -> Icons.Default.LocalShipping
                                 },
                                 contentDescription = null,
@@ -589,7 +670,7 @@ private fun UserCard(user: User) {
                             Icon(
                                 when (user.role) {
                                     UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                                    UserRole.TPS -> Icons.Default.Business
+                                    UserRole.TPS_OFFICER -> Icons.Default.Business
                                     UserRole.DRIVER -> Icons.Default.LocalShipping
                                 },
                                 contentDescription = null,
@@ -726,7 +807,7 @@ private fun RoleDistributionCard(users: List<User>) {
                         Icon(
                             when (role) {
                                 UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                                UserRole.TPS -> Icons.Default.Business
+                                UserRole.TPS_OFFICER -> Icons.Default.Business
                                 UserRole.DRIVER -> Icons.Default.LocalShipping
                             },
                             contentDescription = null,
