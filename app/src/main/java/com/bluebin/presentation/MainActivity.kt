@@ -38,45 +38,93 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+enum class AppState {
+    SPLASH,
+    AUTH,
+    MAIN
+}
+
 @Composable
 fun BluebinApp(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val authState by authViewModel.authState.collectAsState()
+    var appState by remember { mutableStateOf(AppState.SPLASH) }
+    var currentRouteDetailsId by remember { mutableStateOf<String?>(null) }
     
-    when {
-        authState.isLoading -> {
+    // Handle app state transitions
+    LaunchedEffect(authState.isLoading, authState.isAuthenticated, authState.user) {
+        when {
+            // Stay in splash while loading or for initial delay
+            authState.isLoading -> {
+                appState = AppState.SPLASH
+            }
+            // Navigate to auth if not authenticated
+            !authState.isAuthenticated || authState.user == null -> {
+                appState = AppState.AUTH
+            }
+            // Navigate to main if authenticated and approved
+            authState.isAuthenticated && authState.user?.approved == true -> {
+                appState = AppState.MAIN
+            }
+            // Stay in auth for unapproved users
+            else -> {
+                appState = AppState.AUTH
+            }
+        }
+    }
+    
+    when (appState) {
+        AppState.SPLASH -> {
             SplashScreen(
-                onNavigateToAuth = { /* Will be handled by auth state change */ },
-                onNavigateToMain = { /* Will be handled by auth state change */ }
+                onNavigateToAuth = { appState = AppState.AUTH },
+                onNavigateToMain = { appState = AppState.MAIN }
             )
         }
-        authState.user == null -> {
+        
+        AppState.AUTH -> {
             AuthScreen(
-                onNavigateToMain = { /* Will be handled by auth state change */ }
+                onNavigateToMain = { appState = AppState.MAIN }
             )
         }
-        else -> {
+        
+        AppState.MAIN -> {
             // User is authenticated, route based on role
             when (authState.user?.role) {
                 UserRole.ADMIN -> {
-                    AdminDashboardScreen(
-                        onNavigateToAuth = { authViewModel.signOut() }
-                    )
+                    if (currentRouteDetailsId != null) {
+                        // Show RouteDetailsScreen
+                        com.bluebin.presentation.admin.RouteDetailsScreen(
+                            scheduleId = currentRouteDetailsId!!,
+                            onBackClick = { currentRouteDetailsId = null }
+                        )
+                    } else {
+                        // Show AdminDashboardScreen
+                        AdminDashboardScreen(
+                            onNavigateToAuth = { 
+                                authViewModel.signOut()
+                                appState = AppState.AUTH
+                            },
+                            onNavigateToRouteDetails = { scheduleId ->
+                                currentRouteDetailsId = scheduleId
+                            }
+                        )
+                    }
                 }
                 UserRole.DRIVER -> {
                     DriverScreen()
                 }
                 UserRole.TPS_OFFICER -> {
                     TPSOfficerScreen(
-                        onNavigateToAuth = { authViewModel.signOut() }
+                        onNavigateToAuth = { 
+                            authViewModel.signOut()
+                            appState = AppState.AUTH
+                        }
                     )
                 }
                 else -> {
                     // Fallback to auth screen for unknown roles
-                    AuthScreen(
-                        onNavigateToMain = { /* Will be handled by auth state change */ }
-                    )
+                    appState = AppState.AUTH
                 }
             }
         }

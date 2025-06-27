@@ -44,12 +44,9 @@ class ScheduleManagementViewModel @Inject constructor(
                 val allSchedules = scheduleRepository.getAllSchedules()
                 Log.d(TAG, "Loaded ${allSchedules.size} total schedules")
                 
-                // Filter by type and status
+                // Filter by type and status - avoid duplicates
                 val regularSchedules = allSchedules.filter { 
-                    it.generationType == ScheduleGenerationType.MANUAL || 
-                    it.status == ScheduleStatus.ASSIGNED || 
-                    it.status == ScheduleStatus.IN_PROGRESS || 
-                    it.status == ScheduleStatus.COMPLETED 
+                    it.generationType == ScheduleGenerationType.MANUAL
                 }
                 
                 val optimizedSchedules = allSchedules.filter { 
@@ -326,6 +323,77 @@ class ScheduleManagementViewModel @Inject constructor(
         }
     }
 
+    fun approveAndAssignDriverWithDate(
+        scheduleId: String, 
+        driverId: String, 
+        assignedDate: java.time.LocalDate,
+        isRecurring: Boolean = false
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            
+            try {
+                Log.d(TAG, "Approving and assigning driver with date to schedule: $scheduleId")
+                
+                // Convert LocalDate to Timestamp
+                val dateTimestamp = com.google.firebase.Timestamp(
+                    assignedDate.atStartOfDay(java.time.ZoneId.systemDefault()).toEpochSecond(),
+                    0
+                )
+                
+                // First approve the schedule
+                val approveResult = scheduleRepository.approveSchedule(scheduleId)
+                
+                approveResult.fold(
+                    onSuccess = {
+                        Log.d(TAG, "Schedule approved, now assigning driver with date")
+                        
+                        // Then assign driver with date
+                        val assignResult = scheduleRepository.assignDriverWithDate(
+                            scheduleId, driverId, dateTimestamp, isRecurring
+                        )
+                        
+                        assignResult.fold(
+                            onSuccess = {
+                                Log.d(TAG, "Driver assigned with date successfully")
+                                val message = if (isRecurring) {
+                                    "Schedule approved and assigned to driver! Will repeat weekly."
+                                } else {
+                                    "Schedule approved and assigned to driver for ${assignedDate.format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, yyyy"))}!"
+                                }
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    message = message
+                                )
+                                loadSchedules()
+                            },
+                            onFailure = { error ->
+                                Log.e(TAG, "Failed to assign driver with date after approval", error)
+                                _uiState.value = _uiState.value.copy(
+                                    isLoading = false,
+                                    error = "Schedule approved but failed to assign driver: ${error.message}"
+                                )
+                            }
+                        )
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to approve schedule", error)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to approve schedule: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during approve and assign with date", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Unexpected error: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun deleteOptimizedSchedule(scheduleId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
@@ -476,6 +544,121 @@ class ScheduleManagementViewModel @Inject constructor(
         return _uiState.value.schedules.filter { it.driverId == driverId }
     }
 
+    fun loadAvailableDrivers() {
+        viewModelScope.launch {
+            try {
+                Log.d(TAG, "Loading available drivers")
+                val usersResult = userRepository.getAllUsers()
+                val drivers = usersResult.getOrNull()
+                    ?.filter { it.role == UserRole.DRIVER && it.approved }
+                    ?: emptyList()
+                
+                _uiState.value = _uiState.value.copy(
+                    availableDrivers = drivers
+                )
+                Log.d(TAG, "Successfully loaded ${drivers.size} drivers")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading drivers", e)
+                // Don't show error for driver loading failure
+            }
+        }
+    }
+
+    fun assignDriverToSchedule(scheduleId: String, driverId: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            
+            try {
+                Log.d(TAG, "Assigning driver $driverId to schedule $scheduleId")
+                
+                val result = scheduleRepository.assignDriverToSchedule(scheduleId, driverId)
+                
+                result.fold(
+                    onSuccess = {
+                        Log.d(TAG, "Successfully assigned driver to schedule")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            message = "Driver assigned successfully!"
+                        )
+                        // Reload schedules to reflect the change
+                        loadSchedules()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to assign driver to schedule", error)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to assign driver: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during driver assignment", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Unexpected error: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun assignDriverWithSchedule(
+        scheduleId: String, 
+        driverId: String, 
+        assignmentDate: java.time.LocalDate, 
+        isRecurring: Boolean
+    ) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            
+            Log.d(TAG, "Assigning driver $driverId to schedule $scheduleId with date $assignmentDate, recurring: $isRecurring")
+            
+            try {
+                // Convert LocalDate to Timestamp
+                val assignmentTimestamp = com.google.firebase.Timestamp(
+                    assignmentDate.atStartOfDay(java.time.ZoneId.systemDefault()).toEpochSecond(),
+                    0
+                )
+                
+                val result = scheduleRepository.assignDriverWithDate(
+                    scheduleId, 
+                    driverId, 
+                    assignmentTimestamp, 
+                    isRecurring
+                )
+                
+                result.fold(
+                    onSuccess = {
+                        val message = if (isRecurring) {
+                            "Driver assigned successfully with weekly recurrence!"
+                        } else {
+                            "Driver assigned successfully for ${assignmentDate}!"
+                        }
+                        
+                        Log.d(TAG, "Successfully assigned driver with schedule details")
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            message = message
+                        )
+                        loadSchedules()
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "Failed to assign driver with schedule details", error)
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            error = "Failed to assign driver: ${error.message}"
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error assigning driver with schedule details", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Error: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun loadAvailableDrivers(onDriversLoaded: (List<User>) -> Unit) {
         viewModelScope.launch {
             try {
@@ -564,5 +747,6 @@ data class ScheduleManagementUiState(
     val isGenerating: Boolean = false,
     val error: String? = null,
     val message: String? = null,
-    val lastGeneratedSchedule: Schedule? = null
+    val lastGeneratedSchedule: Schedule? = null,
+    val availableDrivers: List<User> = emptyList()
 ) 

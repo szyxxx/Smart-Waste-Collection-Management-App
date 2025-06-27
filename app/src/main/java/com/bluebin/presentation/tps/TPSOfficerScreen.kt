@@ -3,6 +3,7 @@ package com.bluebin.presentation.tps
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -19,8 +21,147 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bluebin.presentation.auth.AuthViewModel
 import com.bluebin.data.model.TPSStatus
+import com.bluebin.ui.components.ModernCard
+import com.bluebin.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+
+@Composable
+private fun ModernTPSOfficerHeader(
+    officerName: String,
+    onRefresh: () -> Unit,
+    onLogout: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                )
+            )
+    ) {
+        Column {
+            // Status bar spacer
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Title row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "🗑️",
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+                    Column {
+                        Text(
+                            text = "TPS Officer Dashboard",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Text(
+                            text = "Waste Management",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                // Action buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onRefresh,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh, 
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    IconButton(
+                        onClick = onLogout,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.Default.ExitToApp, 
+                            contentDescription = "Logout",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Status indicator row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Welcome back, $officerName!",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                )
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(SuccessColor, CircleShape)
+                        )
+                        Text(
+                            text = "Status Monitor",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,209 +173,53 @@ fun TPSOfficerScreen(
     val authState by authViewModel.authState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.loadTPSAssignment()
+    // Handle authentication state
+    LaunchedEffect(authState.isAuthenticated) {
+        if (!authState.isAuthenticated) {
+            onNavigateToAuth()
+        }
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // Modern Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "TPS Officer Dashboard",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
-                    )
-                    Text(
-                        text = "Welcome back, ${authState.user?.name ?: "Officer"}!",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF666666)
-                    )
-                }
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { viewModel.loadTPSAssignment() },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh, 
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = { authViewModel.signOut() },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFFFEBEE), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.ExitToApp, 
-                            contentDescription = "Logout",
-                            tint = Color(0xFFD32F2F)
-                        )
-                    }
-                }
-            }
-        }
+        // Modern Header with gradient
+        ModernTPSOfficerHeader(
+            officerName = authState.user?.name ?: "Officer",
+            onRefresh = { viewModel.refreshAssignment() },
+            onLogout = { authViewModel.signOut() }
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(24.dp),
+            contentPadding = PaddingValues(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // Welcome Section
             item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color.White
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(24.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Manage Your TPS Location",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1A1A1A)
-                            )
-                            Text(
-                                "Monitor waste levels and update status for optimal collection scheduling",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF666666)
-                            )
-                        }
-                        
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .background(
-                                    Color(0xFF4CAF50).copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(20.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "🗑️",
-                                fontSize = 32.sp
-                            )
-                        }
-                    }
-                }
+                WelcomeCard()
             }
 
             // TPS Assignment Card
             item {
-                if (uiState.isLoading) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(40.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(20.dp),
-                                    color = Color(0xFF4CAF50),
-                                    strokeWidth = 2.dp
-                                )
-                                Text(
-                                    "Loading TPS assignment...",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF666666)
-                                )
-                            }
-                        }
+                val assignedTPS = uiState.assignedTPS
+                when {
+                    uiState.isLoading -> {
+                        LoadingCard()
                     }
-                } else if (uiState.assignedTPS != null) {
-                    TPSAssignmentCard(
-                        tps = uiState.assignedTPS!!,
-                        onStatusUpdate = { newStatus ->
-                            viewModel.updateTPSStatus(newStatus)
-                        }
-                    )
-                } else {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFFFFEBEE)
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(64.dp)
-                                    .background(
-                                        Color(0xFFD32F2F).copy(alpha = 0.1f),
-                                        CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    Icons.Default.Warning,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(32.dp),
-                                    tint = Color(0xFFD32F2F)
-                                )
+                    assignedTPS != null -> {
+                        TPSAssignmentCard(
+                            tps = assignedTPS,
+                            isUpdating = uiState.isUpdating,
+                            onStatusUpdate = { newStatus ->
+                                viewModel.updateTPSStatus(newStatus)
                             }
-                            
-                            Text(
-                                "No TPS Assignment",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1A1A1A)
-                            )
-                            Text(
-                                "You haven't been assigned to any TPS location yet. Please contact your administrator for assignment.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF666666),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        )
+                    }
+                    else -> {
+                        NoAssignmentCard()
                     }
                 }
             }
@@ -251,27 +236,16 @@ fun TPSOfficerScreen(
                 }
                 
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            uiState.statusHistory.take(5).forEachIndexed { index, update ->
-                                StatusHistoryItem(update)
-                                if (index < uiState.statusHistory.take(5).size - 1) {
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    HorizontalDivider(
-                                        color = Color(0xFFF5F5F5),
-                                        thickness = 1.dp
-                                    )
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                }
-                            }
-                        }
-                    }
+                    StatusHistoryCard(uiState.statusHistory)
                 }
+            }
+
+            // Quick Actions
+            item {
+                QuickActionsCard(
+                    notificationsEnabled = uiState.notificationsEnabled,
+                    onToggleNotifications = { viewModel.toggleNotifications(it) }
+                )
             }
 
             // Guidelines Card
@@ -290,11 +264,140 @@ fun TPSOfficerScreen(
         }
     }
 
+    // Success message handling
+    uiState.successMessage?.let { message ->
+        LaunchedEffect(message) {
+            // Auto-dismiss success message after showing
+            kotlinx.coroutines.delay(100)
+            viewModel.clearSuccessMessage()
+        }
+        
+        SuccessSnackbar(
+            message = message,
+            onDismiss = { viewModel.clearSuccessMessage() }
+        )
+    }
+
     // Error handling
     uiState.error?.let { error ->
         LaunchedEffect(error) {
-            // Show error snackbar
+            // Auto-dismiss error after 5 seconds
+            kotlinx.coroutines.delay(5000)
             viewModel.clearError()
+        }
+        
+        ErrorSnackbar(
+            message = error,
+            onDismiss = { viewModel.clearError() }
+        )
+    }
+}
+
+@Composable
+private fun WelcomeCard() {
+    ModernCard {
+        Row(
+            modifier = Modifier.padding(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Manage Your TPS Location",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    "Monitor waste levels and update status for optimal collection scheduling",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666)
+                )
+            }
+            
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(
+                        Color(0xFF4CAF50).copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(20.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🗑️",
+                    fontSize = 32.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LoadingCard() {
+    ModernCard {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color(0xFF4CAF50),
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    "Loading TPS assignment...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NoAssignmentCard() {
+    ModernCard {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .background(
+                        Color(0xFFD32F2F).copy(alpha = 0.1f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                    tint = Color(0xFFD32F2F)
+                )
+            }
+            
+            Text(
+                "No TPS Assignment",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A1A)
+            )
+            Text(
+                "You haven't been assigned to any TPS location yet. Please contact your administrator for assignment.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF666666),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }
@@ -302,41 +405,59 @@ fun TPSOfficerScreen(
 @Composable
 private fun TPSAssignmentCard(
     tps: AssignedTPS,
+    isUpdating: Boolean,
     onStatusUpdate: (TPSStatus) -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+    ModernCard {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Header
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Your Assigned TPS",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        tps.name,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        tps.address,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                Color(0xFF4CAF50).copy(alpha = 0.1f),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = Color(0xFF4CAF50)
+                        )
+                    }
+                    
+                    Column {
+                        Text(
+                            "Your Assigned TPS",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFF666666)
+                        )
+                        Text(
+                            tps.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1A1A1A)
+                        )
+                    }
                 }
                 
                 // Current Status Chip
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = when (tps.status) {
-                        TPSStatus.TIDAK_PENUH -> MaterialTheme.colorScheme.primary
-                        TPSStatus.PENUH -> MaterialTheme.colorScheme.error
+                        TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                        TPSStatus.PENUH -> Color(0xFFD32F2F)
                     }
                 ) {
                     Text(
@@ -354,69 +475,174 @@ private fun TPSAssignmentCard(
             
             Spacer(modifier = Modifier.height(16.dp))
             
-            // Capacity Info
+            // Address
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    "Capacity: ${tps.currentCapacity}%",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                Icon(
+                    Icons.Default.Place,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = Color(0xFF666666)
                 )
                 Text(
-                    "Last updated: ${tps.lastUpdated}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    tps.address,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF666666)
                 )
             }
             
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            // Capacity Progress Bar
-            LinearProgressIndicator(
-                progress = tps.currentCapacity / 100f,
-                modifier = Modifier.fillMaxWidth(),
-                color = when {
-                    tps.currentCapacity >= 90 -> MaterialTheme.colorScheme.error
-                    tps.currentCapacity >= 70 -> Color(0xFFF57C00)
-                    else -> MaterialTheme.colorScheme.primary
-                }
-            )
-            
             Spacer(modifier = Modifier.height(16.dp))
+            
+            // Last Updated Info
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF666666)
+                    )
+                    Text(
+                        "Last Updated",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF666666)
+                    )
+                }
+                
+                Text(
+                    tps.lastUpdated,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF1A1A1A)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(20.dp))
             
             // Status Update Buttons
             Text(
                 "Update Status:",
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Medium
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF1A1A1A)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
                     onClick = { onStatusUpdate(TPSStatus.TIDAK_PENUH) },
                     modifier = Modifier.weight(1f),
-                    enabled = tps.status != TPSStatus.TIDAK_PENUH,
+                    enabled = !isUpdating && tps.status != TPSStatus.TIDAK_PENUH,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                        containerColor = Color(0xFF4CAF50),
+                        disabledContainerColor = Color(0xFFE0E0E0)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
+                    if (isUpdating && tps.status != TPSStatus.TIDAK_PENUH) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Available")
                 }
+                
                 Button(
                     onClick = { onStatusUpdate(TPSStatus.PENUH) },
                     modifier = Modifier.weight(1f),
-                    enabled = tps.status != TPSStatus.PENUH,
+                    enabled = !isUpdating && tps.status != TPSStatus.PENUH,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error
-                    )
+                        containerColor = Color(0xFFD32F2F),
+                        disabledContainerColor = Color(0xFFE0E0E0)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
+                    if (isUpdating && tps.status != TPSStatus.PENUH) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Cancel,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Full")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusHistoryCard(statusHistory: List<StatusUpdate>) {
+    ModernCard {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            Color(0xFF2196F3).copy(alpha = 0.1f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF2196F3)
+                    )
+                }
+                
+                Text(
+                    "Status History",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            statusHistory.take(5).forEachIndexed { index, update ->
+                StatusHistoryItem(update)
+                if (index < statusHistory.take(5).size - 1) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(
+                        color = Color(0xFFF5F5F5),
+                        thickness = 1.dp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
             }
         }
@@ -430,37 +656,130 @@ private fun StatusHistoryItem(update: StatusUpdate) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Surface(
                 modifier = Modifier.size(8.dp),
-                shape = RoundedCornerShape(4.dp),
+                shape = CircleShape,
                 color = when (update.status) {
-                    TPSStatus.TIDAK_PENUH -> MaterialTheme.colorScheme.primary
-                    TPSStatus.PENUH -> MaterialTheme.colorScheme.error
+                    TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                    TPSStatus.PENUH -> Color(0xFFD32F2F)
                 }
             ) {}
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                "Status changed to ${update.status.name}",
-                style = MaterialTheme.typography.bodyMedium
-            )
+            
+            Column {
+                Text(
+                    "Status changed to ${if (update.status == TPSStatus.PENUH) "FULL" else "AVAILABLE"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF1A1A1A)
+                )
+                Text(
+                    "by ${update.officerName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF666666)
+                )
+            }
         }
+        
         Text(
             update.timestamp,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            color = Color(0xFF666666)
         )
     }
 }
 
 @Composable
+private fun QuickActionsCard(
+    notificationsEnabled: Boolean,
+    onToggleNotifications: (Boolean) -> Unit
+) {
+    ModernCard {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            Color(0xFF9C27B0).copy(alpha = 0.1f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF9C27B0)
+                    )
+                }
+                
+                Text(
+                    "Quick Actions",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A1A1A)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Notifications toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Notifications,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = Color(0xFF666666)
+                    )
+                    
+                    Column {
+                        Text(
+                            "Status Reminders",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF1A1A1A)
+                        )
+                        Text(
+                            "Get daily reminders to update status",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF666666)
+                        )
+                    }
+                }
+                
+                Switch(
+                    checked = notificationsEnabled,
+                    onCheckedChange = onToggleNotifications,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Color(0xFF4CAF50),
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color(0xFFE0E0E0)
+                    )
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun GuidelinesCard() {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    ModernCard {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -505,7 +824,7 @@ private fun GuidelinesCard() {
                 Row(
                     modifier = Modifier.padding(vertical = 4.dp),
                     verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -517,6 +836,100 @@ private fun GuidelinesCard() {
                         guideline,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF666666)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuccessSnackbar(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFF4CAF50),
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+                
+                Text(
+                    message,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+                
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Dismiss",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorSnackbar(
+    message: String,
+    onDismiss: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = Color(0xFFD32F2F),
+            shadowElevation = 8.dp
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    Icons.Default.Error,
+                    contentDescription = null,
+                    tint = Color.White
+                )
+                
+                Text(
+                    message,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White
+                )
+                
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Dismiss",
+                        tint = Color.White
                     )
                 }
             }

@@ -1,12 +1,15 @@
 package com.bluebin.di
 
+import android.content.Context
 import com.bluebin.data.api.RouteOptimizationApi
+import com.bluebin.data.storage.CloudStorageService
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -59,5 +62,13 @@ object AppModule {
     @Singleton
     fun provideRouteOptimizationApi(retrofit: Retrofit): RouteOptimizationApi {
         return retrofit.create(RouteOptimizationApi::class.java)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideCloudStorageService(
+        @ApplicationContext context: Context
+    ): CloudStorageService {
+        return CloudStorageService(context)
     }
 } 

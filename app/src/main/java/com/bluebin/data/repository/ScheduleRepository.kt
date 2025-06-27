@@ -138,10 +138,61 @@ class ScheduleRepository @Inject constructor(
                 updateData["completedAt"] = System.currentTimeMillis()
             }
             
+            if (status == ScheduleStatus.IN_PROGRESS) {
+                updateData["startedAt"] = System.currentTimeMillis()
+            }
+            
             schedulesCollection.document(scheduleId).update(updateData).await()
             true
         } catch (e: Exception) {
             Log.e(TAG, "Error updating schedule status", e)
+            false
+        }
+    }
+
+    suspend fun updateScheduleStopCompletion(
+        scheduleId: String, 
+        stopCompletion: RouteStopCompletion
+    ): Boolean {
+        return try {
+            Log.d(TAG, "Updating schedule stop completion for schedule: $scheduleId, TPS: ${stopCompletion.tpsId}")
+            
+            // Get current schedule
+            val currentSchedule = getScheduleById(scheduleId)
+            if (currentSchedule == null) {
+                Log.e(TAG, "Schedule not found: $scheduleId")
+                return false
+            }
+            
+            // Update or add the completion data
+            val updatedCompletionData = currentSchedule.routeCompletionData.toMutableList()
+            val existingIndex = updatedCompletionData.indexOfFirst { it.tpsId == stopCompletion.tpsId }
+            
+            if (existingIndex >= 0) {
+                updatedCompletionData[existingIndex] = stopCompletion
+            } else {
+                updatedCompletionData.add(stopCompletion)
+            }
+            
+            // Update the schedule in Firestore
+            val updateData = mapOf(
+                "routeCompletionData" to updatedCompletionData.map { completion ->
+                    mapOf(
+                        "tpsId" to completion.tpsId,
+                        "completedAt" to completion.completedAt,
+                        "proofPhotoUrl" to completion.proofPhotoUrl,
+                        "notes" to completion.notes,
+                        "hasIssue" to completion.hasIssue,
+                        "driverLocation" to completion.driverLocation
+                    )
+                }
+            )
+            
+            schedulesCollection.document(scheduleId).update(updateData).await()
+            Log.d(TAG, "Successfully updated schedule stop completion")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating schedule stop completion", e)
             false
         }
     }
@@ -366,6 +417,71 @@ class ScheduleRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error assigning driver to schedule $scheduleId", e)
             Result.failure(e)
+        }
+    }
+
+    suspend fun assignDriverWithDate(
+        scheduleId: String, 
+        driverId: String, 
+        assignedDate: Timestamp,
+        isRecurring: Boolean = false
+    ): Result<Unit> {
+        return try {
+            Log.d(TAG, "Assigning driver $driverId to schedule $scheduleId for date $assignedDate")
+            
+            val updateData = mutableMapOf<String, Any>(
+                "driverId" to driverId,
+                "status" to ScheduleStatus.ASSIGNED.name,
+                "assignedDate" to assignedDate,
+                "isRecurring" to isRecurring
+            )
+            
+            if (isRecurring) {
+                updateData["recurrenceType"] = RecurrenceType.WEEKLY.name
+                // Calculate next occurrence (7 days later)
+                val nextWeek = Timestamp(assignedDate.seconds + (7 * 24 * 60 * 60), assignedDate.nanoseconds)
+                updateData["nextOccurrence"] = nextWeek
+            } else {
+                updateData["recurrenceType"] = RecurrenceType.NONE.name
+                updateData["nextOccurrence"] = com.google.firebase.firestore.FieldValue.delete()
+            }
+            
+            schedulesCollection.document(scheduleId).update(updateData).await()
+            Log.d(TAG, "Successfully assigned driver with date and recurrence settings")
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error assigning driver with date to schedule", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun canDriverStartSchedule(scheduleId: String): Boolean {
+        return try {
+            val schedule = getScheduleById(scheduleId)
+            if (schedule?.assignedDate == null) return true // No date restriction
+            
+            val assignedDate = schedule.assignedDate.toDate()
+            val today = java.util.Date()
+            
+            // Remove time component for date comparison
+            val assignedCalendar = java.util.Calendar.getInstance().apply { time = assignedDate }
+            val todayCalendar = java.util.Calendar.getInstance().apply { time = today }
+            
+            assignedCalendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            assignedCalendar.set(java.util.Calendar.MINUTE, 0)
+            assignedCalendar.set(java.util.Calendar.SECOND, 0)
+            assignedCalendar.set(java.util.Calendar.MILLISECOND, 0)
+            
+            todayCalendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            todayCalendar.set(java.util.Calendar.MINUTE, 0)
+            todayCalendar.set(java.util.Calendar.SECOND, 0)
+            todayCalendar.set(java.util.Calendar.MILLISECOND, 0)
+            
+            // Can start if today is on or after the assigned date
+            !todayCalendar.time.before(assignedCalendar.time)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking if driver can start schedule", e)
+            true // Allow start if there's an error
         }
     }
 

@@ -17,7 +17,7 @@ service cloud.firestore {
     }
     
     function isTPS() {
-      return isAuthenticated() && getUserRole() == 'TPS';
+      return isAuthenticated() && getUserRole() == 'TPS_OFFICER';
     }
     
     function isDriver() {
@@ -69,13 +69,14 @@ service cloud.firestore {
       // Only admins can create TPS locations
       allow create: if isAdmin();
       
-      // Admins can update any TPS
-      // TPS officers can update status of their assigned TPS
-      allow update: if isAdmin() || 
-                      (isTPS() && isApproved() && 
-                       isAssignedOfficer(resource.data.assignedOfficerId) &&
-                       // Only allow status and lastUpdated field changes for TPS officers
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']));
+      // Admins can update any TPS without restrictions
+      allow update: if isAdmin();
+      
+      // TPS officers can update status and lastUpdated of their assigned TPS only
+      allow update: if isTPS() && isApproved() && 
+                      isAssignedOfficer(resource.data.assignedOfficerId) &&
+                      // Only allow status and lastUpdated field changes for TPS officers
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'lastUpdated']);
       
       // Only admins can delete TPS locations
       allow delete: if isAdmin();
@@ -95,12 +96,13 @@ service cloud.firestore {
       allow create: if isAdmin();
       
       // Admins can update any schedule
-      // Drivers can update status and completion of their own schedules
+      // Drivers can update status, completion, and route progress of their own schedules
       allow update: if isAdmin() || 
                       (isDriver() && isApproved() && 
                        resource.data.driverId == request.auth.uid &&
-                       // Only allow status and completion updates for drivers
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt']));
+                       // Allow drivers to update status, completion, route progress, and start time
+                       request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'completedAt', 'startedAt', 'routeCompletionData']) &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'completedAt', 'startedAt', 'routeCompletionData']));
       
       // Only admins can delete schedules
       allow delete: if isAdmin();

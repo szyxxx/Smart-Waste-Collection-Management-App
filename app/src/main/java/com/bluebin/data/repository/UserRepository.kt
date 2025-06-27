@@ -124,17 +124,81 @@ class UserRepository @Inject constructor(
 
     suspend fun getAllUsers(): Result<List<User>> {
         return try {
-            val snapshot = usersCollection
-                .orderBy("createdAt", Query.Direction.DESCENDING)
-                .get()
-                .await()
-            
-            val users = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(User::class.java)
+            // First try with ordering by createdAt
+            val snapshot = try {
+                usersCollection
+                    .orderBy("createdAt", Query.Direction.DESCENDING)
+                    .get()
+                    .await()
+            } catch (orderException: Exception) {
+                // If ordering fails (e.g., index not available), get all documents without ordering
+                android.util.Log.w("UserRepository", "Failed to order by createdAt, fetching without ordering", orderException)
+                usersCollection.get().await()
             }
             
+            val users = snapshot.documents.mapNotNull { doc ->
+                try {
+                    // Try automatic parsing first
+                    val user = doc.toObject(User::class.java)
+                    if (user != null) {
+                        // Ensure the user has the uid field set from document ID
+                        return@mapNotNull user.copy(uid = doc.id)
+                    }
+                    
+                    // If automatic parsing fails, try manual parsing
+                    val data = doc.data
+                    if (data != null) {
+                        val roleString = data["role"] as? String ?: "TPS_OFFICER"
+                        val role = try {
+                            UserRole.valueOf(roleString)
+                        } catch (e: Exception) {
+                            UserRole.TPS_OFFICER
+                        }
+                        
+                        return@mapNotNull User(
+                            uid = doc.id,
+                            name = data["name"] as? String ?: "",
+                            email = data["email"] as? String ?: "",
+                            role = role,
+                            approved = data["approved"] as? Boolean ?: false,
+                            createdAt = (data["createdAt"] as? Long) ?: System.currentTimeMillis()
+                        )
+                    }
+                    
+                    null
+                } catch (parseException: Exception) {
+                    android.util.Log.w("UserRepository", "Failed to parse user document ${doc.id}", parseException)
+                    // Try manual parsing as fallback
+                    try {
+                        val data = doc.data
+                        if (data != null) {
+                            val roleString = data["role"] as? String ?: "TPS_OFFICER"
+                            val role = try {
+                                UserRole.valueOf(roleString)
+                            } catch (e: Exception) {
+                                UserRole.TPS_OFFICER
+                            }
+                            
+                            User(
+                                uid = doc.id,
+                                name = data["name"] as? String ?: "",
+                                email = data["email"] as? String ?: "",
+                                role = role,
+                                approved = data["approved"] as? Boolean ?: false,
+                                createdAt = (data["createdAt"] as? Long) ?: System.currentTimeMillis()
+                            )
+                        } else null
+                    } catch (fallbackException: Exception) {
+                        android.util.Log.e("UserRepository", "Complete failure to parse user document ${doc.id}", fallbackException)
+                        null
+                    }
+                }
+            }
+            
+            android.util.Log.d("UserRepository", "Successfully loaded ${users.size} users")
             Result.success(users)
         } catch (e: Exception) {
+            android.util.Log.e("UserRepository", "Failed to load users", e)
             Result.failure(e)
         }
     }

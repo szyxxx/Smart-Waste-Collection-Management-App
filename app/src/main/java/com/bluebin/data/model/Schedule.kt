@@ -14,8 +14,8 @@ data class Schedule(
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     
-    // NEW: Fields for AI-generated schedules
-    @PropertyName("isOptimized")
+    // NEW: Fields for AI-generated schedules (mapped to 'optimized' for Firestore compatibility)
+    @PropertyName("optimized")
     val isOptimized: Boolean = false,
     @PropertyName("generationType")
     val generationType: ScheduleGenerationType = ScheduleGenerationType.MANUAL,
@@ -30,7 +30,23 @@ data class Schedule(
     @PropertyName("totalDistance")
     val totalDistance: Double = 0.0,
     @PropertyName("generatedAt")
-    val generatedAt: Long? = null
+    val generatedAt: Long? = null,
+    
+    // NEW: Route completion data
+    @PropertyName("routeCompletionData")
+    val routeCompletionData: List<RouteStopCompletion> = emptyList(),
+    @PropertyName("startedAt")
+    val startedAt: Long? = null,
+    
+    // NEW: Schedule assignment and recurrence
+    @PropertyName("assignedDate")
+    val assignedDate: Timestamp? = null,
+    @PropertyName("isRecurring")
+    val isRecurring: Boolean = false,
+    @PropertyName("recurrenceType")
+    val recurrenceType: RecurrenceType = RecurrenceType.NONE,
+    @PropertyName("nextOccurrence")
+    val nextOccurrence: Timestamp? = null
 ) {
     // No-argument constructor for Firestore
     constructor() : this(
@@ -48,7 +64,13 @@ data class Schedule(
         priority = SchedulePriority.NORMAL,
         estimatedDuration = 0.0,
         totalDistance = 0.0,
-        generatedAt = null
+        generatedAt = null,
+        routeCompletionData = emptyList(),
+        startedAt = null,
+        assignedDate = null,
+        isRecurring = false,
+        recurrenceType = RecurrenceType.NONE,
+        nextOccurrence = null
     )
 }
 
@@ -68,6 +90,11 @@ enum class ScheduleGenerationType {
 
 enum class SchedulePriority {
     LOW, NORMAL, HIGH, URGENT
+}
+
+enum class RecurrenceType {
+    NONE,           // No recurrence
+    WEEKLY          // Repeat weekly
 }
 
 // Simplified optimization data (instead of complex nested objects)
@@ -95,4 +122,22 @@ data class SimpleRouteSegment(
     val estimatedTimeMinutes: Double = 0.0
 ) {
     constructor() : this("", "", 0.0, 0.0)
+}
+
+// Data class for storing route stop completion details
+data class RouteStopCompletion(
+    @PropertyName("tpsId")
+    val tpsId: String = "",
+    @PropertyName("completedAt")
+    val completedAt: Long? = null,
+    @PropertyName("proofPhotoUrl")
+    val proofPhotoUrl: String? = null,
+    @PropertyName("notes")
+    val notes: String = "",
+    @PropertyName("hasIssue")
+    val hasIssue: Boolean = false,
+    @PropertyName("driverLocation")
+    val driverLocation: Map<String, Double>? = null // latitude, longitude
+) {
+    constructor() : this("", null, null, "", false, null)
 } 

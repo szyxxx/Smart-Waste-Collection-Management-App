@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,7 +15,9 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -41,8 +45,9 @@ fun DriverScreen(
     val uiState by driverViewModel.uiState.collectAsState()
     val context = LocalContext.current
     
-    var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Dashboard", "Active Route", "Collections", "Performance")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     // Navigation state management
     var showNavigationScreen by remember { mutableStateOf(false) }
@@ -112,12 +117,16 @@ fun DriverScreen(
 
         // Tab Navigation
         ModernTabRow(
-            selectedTabIndex = selectedTab,
+            selectedTabIndex = pagerState.currentPage,
             tabs = tabs,
-            onTabSelected = { selectedTab = it }
+            onTabSelected = { index ->
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(index)
+                }
+            }
         )
 
-        // Content
+        // Swipeable Content
         if (uiState.isLoading) {
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -126,13 +135,18 @@ fun DriverScreen(
                 ModernLoadingIndicator()
             }
         } else {
-            when (selectedTab) {
-                0 -> DashboardTab(uiState)
-                1 -> ActiveRouteTab(uiState, driverViewModel) {
-                    showNavigationScreen = true
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> DashboardTab(uiState)
+                    1 -> ActiveRouteTab(uiState, driverViewModel) {
+                        showNavigationScreen = true
+                    }
+                    2 -> CollectionsTab(uiState)
+                    3 -> PerformanceTab(uiState)
                 }
-                2 -> CollectionsTab(uiState)
-                3 -> PerformanceTab(uiState)
             }
         }
     }
@@ -156,101 +170,121 @@ private fun ModernDriverHeader(
                     )
                 )
             )
-        ) {
-            Column {
+    ) {
+        Column {
             // Status bar spacer
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
             
+            // Title row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                    .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "🚛",
-                            style = MaterialTheme.typography.headlineMedium
-                        )
+                    Text(
+                        text = "🚛",
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+                    Column {
                         Text(
                             text = "Driver Dashboard",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimary
                         )
-                    }
                         Text(
-                        text = "Welcome back, $driverName!",
+                            text = "Collection Routes",
                             style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
                         )
                     }
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                    // Live tracking indicator
-                    if (isLocationTracking) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(20.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .background(SuccessColor, CircleShape)
-                                )
-                                Text(
-                                    text = "Live Tracking",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                    
-                    // Action buttons
-                        IconButton(
+                }
+                
+                // Action buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
                         onClick = onRefresh,
-                            modifier = Modifier
-                                .size(40.dp)
+                        modifier = Modifier
+                            .size(48.dp)
                             .background(
                                 MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
                                 CircleShape
                             )
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh, 
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    
+                    IconButton(
+                        onClick = onLogout,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                                CircleShape
+                            )
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ExitToApp, 
+                            contentDescription = "Logout",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Status indicator row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Welcome back, $driverName!",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                )
+                
+                if (isLocationTracking) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(
-                                Icons.Default.Refresh, 
-                                contentDescription = "Refresh",
-                            tint = MaterialTheme.colorScheme.onPrimary
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(SuccessColor, CircleShape)
+                            )
+                            Text(
+                                text = "Live Tracking",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                        
-                        IconButton(
-                        onClick = onLogout,
-                            modifier = Modifier
-                                .size(40.dp)
-                            .background(
-                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
-                                CircleShape
-                            )
-                        ) {
-                            Icon(
-                            Icons.AutoMirrored.Filled.ExitToApp, 
-                                contentDescription = "Logout",
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
                     }
                 }
             }
@@ -449,22 +483,37 @@ fun CollectionsTab(uiState: DriverUiState) {
     ) {
         item {
             ModernSectionHeader(
-                title = "Collection History",
-                subtitle = "${uiState.collectionRecords.size} completed collections"
+                title = "Collection Schedules",
+                subtitle = "${uiState.assignedSchedules.size} scheduled collections"
             )
         }
 
-        items(uiState.collectionRecords) { record ->
-            ModernCollectionRecordCard(record)
+        items(uiState.assignedSchedules) { schedule ->
+            ExpandableScheduleCard(schedule)
         }
 
-        if (uiState.collectionRecords.isEmpty()) {
+        if (uiState.assignedSchedules.isEmpty()) {
             item {
                 ModernEmptyState(
-                    icon = Icons.Default.History,
-                    title = "No Collections Yet",
-                    subtitle = "Your completed collections will appear here"
+                    icon = Icons.Default.Schedule,
+                    title = "No Schedules Assigned",
+                    subtitle = "Your assigned collection schedules will appear here"
                 )
+            }
+        }
+        
+        // Collection History Section
+        if (uiState.collectionRecords.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+                ModernSectionHeader(
+                    title = "Collection History",
+                    subtitle = "${uiState.collectionRecords.size} completed collections"
+                )
+            }
+
+            items(uiState.collectionRecords) { record ->
+                ModernCollectionRecordCard(record)
             }
         }
     }
@@ -921,57 +970,171 @@ fun IssueReportDialog(onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
 
 @Composable
 fun ModernCollectionRecordCard(record: CollectionRecord) {
-    ModernCard {
+    var isExpanded by remember { mutableStateOf(false) }
+    val dateFormatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Header - Schedule Date and Status
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .background(
-                            SuccessColor.copy(alpha = 0.12f),
-                            RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = SuccessColor,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(
+                                SuccessColor.copy(alpha = 0.12f),
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = SuccessColor,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    
+                    Column {
+                        Text(
+                            text = dateFormatter.format(record.schedule.date.toDate()),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${record.totalStops} TPS locations • ${record.duration}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = SuccessColor.copy(alpha = 0.1f)
+                    ) {
+                        Text(
+                            text = record.status,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = SuccessColor
+                        )
+                    }
+                    
+                    // Expand/Collapse button
+                    IconButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isExpanded) "Hide Details" else "Show Details",
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            
+            // Expandable Route Details
+            if (isExpanded) {
+                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = record.routeId,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        text = "Route Details",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                    
+                    // TPS Route Stops (limit to first 3)
+                    val visibleStops = record.schedule.tpsRoute.take(3)
+                    
+                    visibleStops.forEachIndexed { index, tpsId ->
+                        val tps = record.tpsStops.find { it.tpsId == tpsId }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(
+                                        SuccessColor.copy(alpha = 0.1f),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${index + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SuccessColor
+                                )
+                            }
+                            
+                            Text(
+                                text = tps?.name ?: "TPS Stop ${index + 1}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1f)
+                            )
+                            
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = "Completed",
+                                modifier = Modifier.size(12.dp),
+                                tint = SuccessColor
+                            )
+                        }
+                    }
+                    
+                    if (record.schedule.tpsRoute.size > 3) {
+                        Text(
+                            text = "+ ${record.schedule.tpsRoute.size - 3} more stops",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 26.dp)
+                        )
+                    }
+                    
+                    // Completion info
                     Text(
-                        text = record.date,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Stops: ${record.completedStops}/${record.totalStops} • Duration: ${record.duration}",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "Completed at ${timeFormatter.format(Date(record.schedule.completedAt ?: System.currentTimeMillis()))}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            
-            ModernStatusChip(
-                text = record.status,
-                color = SuccessColor
-            )
         }
     }
 }
@@ -1211,5 +1374,280 @@ private fun MetricBar(
             color = color,
             trackColor = color.copy(alpha = 0.2f)
         )
+    }
+}
+
+@Composable
+fun ExpandableScheduleCard(schedule: Schedule) {
+    var isExpanded by remember { mutableStateOf(false) }
+    val dateFormatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+    val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    
+    ModernCard {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header - Schedule Date and Status
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = dateFormatter.format(schedule.date.toDate()),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    // Show assigned date if different from schedule date
+                    if (schedule.assignedDate != null) {
+                        val assignedDateStr = dateFormatter.format(schedule.assignedDate.toDate())
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Event,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Start Date: $assignedDateStr",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            if (schedule.isRecurring) {
+                                Icon(
+                                    Icons.Default.Repeat,
+                                    contentDescription = "Recurring",
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                    
+                    Text(
+                        text = "${schedule.tpsRoute.size} TPS locations • ${timeFormatter.format(schedule.date.toDate())}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ModernStatusChip(
+                        text = when (schedule.status) {
+                            ScheduleStatus.PENDING -> "Pending"
+                            ScheduleStatus.PENDING_APPROVAL -> "Pending Approval"
+                            ScheduleStatus.APPROVED -> "Approved"
+                            ScheduleStatus.ASSIGNED -> "Assigned"
+                            ScheduleStatus.IN_PROGRESS -> "Active"
+                            ScheduleStatus.COMPLETED -> "Completed"
+                            ScheduleStatus.CANCELLED -> "Cancelled"
+                        },
+                        color = when (schedule.status) {
+                            ScheduleStatus.PENDING -> Color(0xFF9E9E9E)
+                            ScheduleStatus.PENDING_APPROVAL -> Color(0xFFFF9800)
+                            ScheduleStatus.APPROVED -> InfoColor
+                            ScheduleStatus.ASSIGNED -> WarningColor
+                            ScheduleStatus.IN_PROGRESS -> MaterialTheme.colorScheme.primary
+                            ScheduleStatus.COMPLETED -> SuccessColor
+                            ScheduleStatus.CANCELLED -> ErrorColor
+                        }
+                    )
+                    
+                    // Expand/Collapse button
+                    TextButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.padding(0.dp)
+                    ) {
+                        Text(
+                            text = if (isExpanded) "Hide Details" else "Show Details",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Icon(
+                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+            
+            // Expandable Route Details
+            if (isExpanded) {
+                Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Route Details",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    // TPS Route Stops
+                    schedule.tpsRoute.forEachIndexed { index, tpsId ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Stop number
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${index + 1}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            
+                            // TPS Info
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "TPS Stop ${index + 1}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "ID: ${tpsId.take(8)}...",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            
+                            // Stop status indicator
+                            if (schedule.status == ScheduleStatus.COMPLETED) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = "Completed",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = SuccessColor
+                                )
+                            } else if (schedule.status == ScheduleStatus.IN_PROGRESS && index == 0) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    contentDescription = "Current",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Schedule Metadata
+                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (schedule.assignedDate != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Assigned Date:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = dateFormatter.format(schedule.assignedDate.toDate()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        
+                        if (schedule.isRecurring) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Recurrence:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Repeat,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = "Weekly",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                            
+                            if (schedule.nextOccurrence != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Next Occurrence:",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = dateFormatter.format(schedule.nextOccurrence.toDate()),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                        
+                        if (schedule.completedAt != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Completed:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = dateFormatter.format(Date(schedule.completedAt)),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 } 

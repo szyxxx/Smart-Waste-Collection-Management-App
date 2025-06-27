@@ -5,15 +5,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bluebin.data.model.*
+import com.bluebin.ui.components.*
+import com.bluebin.ui.theme.SuccessColor
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -31,8 +38,9 @@ fun ReportsAnalyticsScreen(
     viewModel: ReportsAnalyticsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Overview", "User Analytics", "TPS Analytics", "Schedule Reports", "Performance")
+    val tabs = listOf("Overview", "Users", "TPS", "Schedules", "Performance")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.loadAnalyticsData()
@@ -43,116 +51,82 @@ fun ReportsAnalyticsScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Modern Header with status bar padding
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Column {
-                // Status bar spacer
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onBackClick,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Text(
-                        text = "Reports & Analytics",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF1A1A1A)
-                    )
-                    
-                    Spacer(modifier = Modifier.weight(1f))
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(
-                            onClick = { viewModel.loadAnalyticsData() },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(0xFFF5F5F5), CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                        IconButton(
-                            onClick = { viewModel.exportReport() },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(0xFFF5F5F5), CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Default.FileDownload,
-                                contentDescription = "Export",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                    }
+        // Modern Header with gradient
+        ModernAnalyticsHeader(
+            onBackClick = onBackClick,
+            onRefresh = { viewModel.loadAnalyticsData() },
+            onExport = { viewModel.exportReport() }
+        )
+
+        // Tab Navigation
+        ModernTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            tabs = tabs,
+            onTabSelected = { index ->
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(index)
                 }
             }
-        }
+        )
 
-        // Tab Row
-        TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) }
+        // Swipeable Content
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (page) {
+                0 -> OverviewTab(
+                    analytics = uiState.analytics,
+                    isLoading = uiState.isLoading
+                )
+                1 -> UserAnalyticsTab(
+                    analytics = uiState.analytics,
+                    users = uiState.users,
+                    isLoading = uiState.isLoading
+                )
+                2 -> TPSAnalyticsTab(
+                    analytics = uiState.analytics,
+                    tpsLocations = uiState.tpsLocations,
+                    isLoading = uiState.isLoading
+                )
+                3 -> ScheduleReportsTab(
+                    analytics = uiState.analytics,
+                    schedules = uiState.schedules,
+                    isLoading = uiState.isLoading
+                )
+                4 -> PerformanceTab(
+                    analytics = uiState.analytics,
+                    isLoading = uiState.isLoading
                 )
             }
         }
+    }
+}
 
-        // Content based on selected tab
-        when (selectedTab) {
-            0 -> OverviewTab(
-                analytics = uiState.analytics,
-                isLoading = uiState.isLoading
+@Composable
+private fun ModernAnalyticsHeader(
+    onBackClick: () -> Unit,
+    onRefresh: () -> Unit,
+    onExport: () -> Unit
+) {
+    ModernGradientHeader(
+        title = "Reports & Analytics",
+        subtitle = "System Performance Insights",
+        emoji = "📊",
+        onBackClick = onBackClick,
+        actions = {
+            ModernIconButton(
+                onClick = onRefresh,
+                icon = Icons.Default.Refresh,
+                contentDescription = "Refresh"
             )
-            1 -> UserAnalyticsTab(
-                analytics = uiState.analytics,
-                users = uiState.users,
-                isLoading = uiState.isLoading
-            )
-            2 -> TPSAnalyticsTab(
-                analytics = uiState.analytics,
-                tpsLocations = uiState.tpsLocations,
-                isLoading = uiState.isLoading
-            )
-            3 -> ScheduleReportsTab(
-                analytics = uiState.analytics,
-                schedules = uiState.schedules,
-                isLoading = uiState.isLoading
-            )
-            4 -> PerformanceTab(
-                analytics = uiState.analytics,
-                isLoading = uiState.isLoading
+            ModernIconButton(
+                onClick = onExport,
+                icon = Icons.Default.FileDownload,
+                contentDescription = "Export"
             )
         }
-    }
+    )
 }
 
 @Composable

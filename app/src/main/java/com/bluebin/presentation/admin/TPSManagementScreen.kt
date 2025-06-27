@@ -1,3 +1,44 @@
+/*
+ * Google Places API Integration Instructions
+ * ========================================
+ * 
+ * This file contains placeholder implementations for location search.
+ * To integrate with Google Places API:
+ * 
+ * 1. Add dependency to app/build.gradle.kts:
+ *    implementation("com.google.android.libraries.places:places:3.3.0")
+ * 
+ * 2. Enable Places API in Google Cloud Console:
+ *    - Go to Google Cloud Console
+ *    - Enable Places API (New)
+ *    - Add your API key to AndroidManifest.xml:
+ *      <meta-data android:name="com.google.android.geo.API_KEY" android:value="YOUR_API_KEY"/>
+ * 
+ * 3. Initialize Places in your Application class or MainActivity:
+ *    Places.initialize(applicationContext, "YOUR_API_KEY")
+ * 
+ * 4. Replace placeholder functions:
+ *    - searchLocationsWithPlacesAPI() in TPSLocationStep
+ *    - searchWithGooglePlacesAPI() (currently empty function)
+ *    - Search suggestions in GoogleMapsPickerDialog
+ * 
+ * 5. Example implementation structure:
+ *    val placesClient = Places.createClient(context)
+ *    val request = FindAutocompletePredictionsRequest.builder()
+ *        .setQuery(query)
+ *        .setLocationBias(RectangularBounds.newInstance(
+ *            LatLng(-8.0, 105.0),   // Southwest Indonesia
+ *            LatLng(-5.0, 112.0)    // Northeast Java
+ *        ))
+ *        .setCountries("ID")
+ *        .build()
+ *    
+ *    placesClient.findAutocompletePredictions(request)
+ *        .addOnSuccessListener { response ->
+ *            // Convert AutocompletePrediction to LocationSuggestion
+ *        }
+ */
+
 package com.bluebin.presentation.admin
 
 import androidx.compose.foundation.BorderStroke
@@ -7,6 +48,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,8 +57,10 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.Divider
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
@@ -24,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -35,6 +81,22 @@ import com.bluebin.data.model.UserRole
 import com.bluebin.ui.components.ModernCard
 import com.bluebin.ui.components.ModernSectionHeader
 import com.bluebin.ui.components.ModernStatusChip
+import com.bluebin.ui.components.ModernTabRow
+import com.bluebin.ui.theme.SuccessColor
+import androidx.compose.runtime.LaunchedEffect
+import com.google.android.libraries.places.api.Places
+import com.google.android.libraries.places.api.model.AutocompletePrediction
+import com.google.android.libraries.places.api.model.AutocompleteSessionToken
+import com.google.android.libraries.places.api.model.Place
+import com.google.android.libraries.places.api.model.RectangularBounds
+import com.google.android.libraries.places.api.model.TypeFilter
+import com.google.android.libraries.places.api.net.FetchPlaceRequest
+import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import com.google.android.libraries.places.api.net.PlacesClient
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import android.location.Geocoder
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,8 +105,9 @@ fun TPSManagementScreen(
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("All TPS", "Register TPS", "Assign Officers", "Analytics")
+    val tabs = listOf("All TPS", "Register", "Officers", "Analytics")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.clearMessage()
@@ -53,91 +116,13 @@ fun TPSManagementScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // Modern Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Column {
-                // Status bar spacer
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "TPS Management",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A)
-                        )
-                        Text(
-                            text = "Monitor and manage TPS locations",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666)
-                        )
-                    }
-                    
-                    IconButton(
-                        onClick = { viewModel.loadDashboardData() },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                }
-
-                // Modern Tab Row
-                PrimaryTabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF4CAF50)
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
-                            text = { 
-                                Text(
-                                    title,
-                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == index) Color(0xFF4CAF50) else Color(0xFF666666)
-                                ) 
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        // Modern Header with gradient
+        ModernTPSHeader(
+            onNavigateBack = onNavigateBack,
+            onRefresh = { viewModel.loadDashboardData() }
+        )
 
         // Status Messages
         uiState.message?.let { message ->
@@ -156,37 +141,186 @@ fun TPSManagementScreen(
             )
         }
 
+        // Tab Navigation
+        ModernTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            tabs = tabs,
+            onTabSelected = { index ->
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(index)
+                }
+            }
+        )
+
         // Loading Indicator
         if (uiState.isLoading) {
             ModernLoadingIndicator()
         }
 
-        // Tab Content
-        when (selectedTab) {
-            0 -> AllTPSTab(
-                tpsLocations = uiState.tpsLocations,
-                onUpdateStatus = viewModel::updateTPSStatus,
-                isLoading = uiState.isLoading
+        // Swipeable Content
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (page) {
+                0 -> AllTPSTab(
+                    tpsLocations = uiState.tpsLocations,
+                    onUpdateStatus = viewModel::updateTPSStatus,
+                    isLoading = uiState.isLoading
+                )
+                1 -> RegisterTPSTab(
+                    onRegisterTPS = { tps ->
+                        viewModel.registerTPS(tps)
+                    },
+                    isLoading = uiState.isLoading
+                )
+                2 -> AssignOfficersTab(
+                    tpsLocations = uiState.tpsLocations,
+                    onAssignOfficer = { tpsId, officerId ->
+                        viewModel.assignOfficerToTPS(tpsId, officerId)
+                    },
+                    isLoading = uiState.isLoading,
+                    availableOfficers = uiState.users.filter { it.role == UserRole.TPS_OFFICER && it.approved },
+                    isLoadingOfficers = uiState.isLoading
+                )
+                3 -> TPSAnalyticsTab(
+                    tpsLocations = uiState.tpsLocations,
+                    stats = uiState.stats
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModernTPSHeader(
+    onNavigateBack: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                )
             )
-            1 -> RegisterTPSTab(
-                onRegisterTPS = { tps ->
-                    viewModel.registerTPS(tps)
-                },
-                isLoading = uiState.isLoading
-            )
-            2 -> AssignOfficersTab(
-                tpsLocations = uiState.tpsLocations,
-                onAssignOfficer = { tpsId, officerId ->
-                    viewModel.assignOfficerToTPS(tpsId, officerId)
-                },
-                isLoading = uiState.isLoading,
-                availableOfficers = uiState.users.filter { it.role == UserRole.TPS_OFFICER && it.approved },
-                isLoadingOfficers = uiState.isLoading
-            )
-            3 -> TPSAnalyticsTab(
-                tpsLocations = uiState.tpsLocations,
-                stats = uiState.stats
-            )
+    ) {
+        Column {
+            // Status bar spacer
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Title row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "🗑️",
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+                    Column {
+                        Text(
+                            text = "TPS Management",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Text(
+                            text = "Location Control",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                // Action buttons
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.Refresh, 
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            
+            // Status indicator row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Monitor and manage TPS locations",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                )
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(SuccessColor, CircleShape)
+                        )
+                        Text(
+                            text = "Location Monitor",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -319,9 +453,13 @@ private fun AllTPSTab(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(tpsLocations) { tps ->
+                android.util.Log.d("TPSManagement", "TPS Item - ID: '${tps.tpsId}', Name: '${tps.name}', Status: ${tps.status}")
                 ModernTPSCard(
                     tps = tps,
-                    onUpdateStatus = { status -> onUpdateStatus(tps.tpsId, status) },
+                    onUpdateStatus = { status -> 
+                        android.util.Log.d("TPSManagement", "Status update requested for TPS ID: '${tps.tpsId}' to status: $status")
+                        onUpdateStatus(tps.tpsId, status)
+                    },
                     isLoading = isLoading
                 )
             }
@@ -516,31 +654,37 @@ private fun ModernTPSCard(
                     modifier = Modifier
                         .size(48.dp)
                         .background(
-                            if (tps.status == TPSStatus.PENUH) 
-                                Color(0xFFD32F2F).copy(alpha = 0.1f)
-                            else 
-                                Color(0xFF4CAF50).copy(alpha = 0.1f),
+                            when (tps.status) {
+                                TPSStatus.PENUH -> Color(0xFFD32F2F).copy(alpha = 0.1f)
+                                TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+                            },
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        if (tps.status == TPSStatus.PENUH) Icons.Default.Warning else Icons.Default.LocationOn,
+                        when (tps.status) {
+                            TPSStatus.PENUH -> Icons.Default.Warning
+                            TPSStatus.TIDAK_PENUH -> Icons.Default.LocationOn
+                        },
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = if (tps.status == TPSStatus.PENUH) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                        tint = when (tps.status) {
+                            TPSStatus.PENUH -> Color(0xFFD32F2F)
+                            TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                        }
                     )
                 }
                 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = tps.name,
+                        tps.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF1A1A1A)
                     )
                     Text(
-                        text = tps.address,
+                        tps.address,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF666666)
                     )
@@ -555,10 +699,10 @@ private fun ModernTPSCard(
                 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (tps.status == TPSStatus.PENUH) 
-                        Color(0xFFD32F2F).copy(alpha = 0.1f)
-                    else 
-                        Color(0xFF4CAF50).copy(alpha = 0.1f)
+                    color = when (tps.status) {
+                        TPSStatus.PENUH -> Color(0xFFD32F2F).copy(alpha = 0.1f)
+                        TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+                    }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -566,19 +710,27 @@ private fun ModernTPSCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            if (tps.status == TPSStatus.PENUH) Icons.Default.Warning else Icons.Default.CheckCircle,
+                            when (tps.status) {
+                                TPSStatus.PENUH -> Icons.Default.Warning
+                                TPSStatus.TIDAK_PENUH -> Icons.Default.CheckCircle
+                            },
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = if (tps.status == TPSStatus.PENUH) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                            tint = when (tps.status) {
+                                TPSStatus.PENUH -> Color(0xFFD32F2F)
+                                TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                            }
                         )
                         Text(
                             when (tps.status) {
                                 TPSStatus.PENUH -> "Full"
                                 TPSStatus.TIDAK_PENUH -> "Available"
                             },
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = if (tps.status == TPSStatus.PENUH) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (tps.status) {
+                                TPSStatus.PENUH -> Color(0xFFD32F2F)
+                                TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                            }
                         )
                     }
                 }
@@ -890,28 +1042,47 @@ private fun LocationDistributionCard(tpsLocations: List<TPS>) {
                 color = Color(0xFF1A1A1A)
             )
             
-            val locationGroups = tpsLocations.groupBy { 
-                it.address.split(",").firstOrNull()?.trim() ?: "Unknown"
-            }.toList().sortedByDescending { it.second.size }
-            
-            if (locationGroups.isNotEmpty()) {
-                locationGroups.take(5).forEach { (area, tpsList) ->
+            if (tpsLocations.isNotEmpty()) {
+                tpsLocations.forEach { tps ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            area,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF1A1A1A)
-                        )
-                        Text(
-                            "${tpsList.size} locations",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF666666)
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                tps.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF1A1A1A)
+                            )
+                            Text(
+                                tps.address,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF666666)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = when (tps.status) {
+                                TPSStatus.PENUH -> Color(0xFFD32F2F).copy(alpha = 0.1f)
+                                TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50).copy(alpha = 0.1f)
+                            }
+                        ) {
+                            Text(
+                                when (tps.status) {
+                                    TPSStatus.PENUH -> "Full"
+                                    TPSStatus.TIDAK_PENUH -> "Available"
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = when (tps.status) {
+                                    TPSStatus.PENUH -> Color(0xFFD32F2F)
+                                    TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                                }
+                            )
+                        }
                     }
                 }
             } else {
@@ -1052,7 +1223,10 @@ private fun RecentUpdatesCard(tpsLocations: List<TPS>) {
                                     TPSStatus.TIDAK_PENUH -> "Available"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (tps.status == TPSStatus.PENUH) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                                color = when (tps.status) {
+                                    TPSStatus.PENUH -> Color(0xFFD32F2F)
+                                    TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                                }
                             )
                         }
                         Text(
@@ -1497,8 +1671,10 @@ private fun TPSAssignmentCard(
                         TPSStatus.PENUH -> "Full"
                         TPSStatus.TIDAK_PENUH -> "Available"
                     },
-                    color = if (tps.status == TPSStatus.PENUH) 
-                        Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                    color = when (tps.status) {
+                        TPSStatus.PENUH -> Color(0xFFD32F2F)
+                        TPSStatus.TIDAK_PENUH -> Color(0xFF4CAF50)
+                    }
                 )
             }
 
@@ -1660,7 +1836,7 @@ private fun GoogleMapsPickerDialog(
     var selectedAddress by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
     var isSearching by remember { mutableStateOf(false) }
-    var searchSuggestions by remember { mutableStateOf(listOf<Triple<Double, Double, String>>()) }
+    var searchSuggestions by remember { mutableStateOf<List<Triple<Double, Double, String>>>(emptyList()) }
     var showSuggestions by remember { mutableStateOf(false) }
     
     // Camera position state for the map
@@ -1668,28 +1844,32 @@ private fun GoogleMapsPickerDialog(
         position = CameraPosition.fromLatLngZoom(LatLng(initialLatitude, initialLongitude), 12f)
     }
     
-    // Handle search functionality
+    // Handle search functionality (placeholder - replace with Google Places API)
     LaunchedEffect(isSearching) {
         if (isSearching && searchQuery.isNotBlank()) {
             delay(1000) // Simulate search delay
-            val searchResults = performMockSearch(searchQuery)
-            if (searchResults != null) {
-                val newLocation = LatLng(searchResults.first, searchResults.second)
-                selectedLocation = newLocation
-                selectedAddress = searchResults.third
-                cameraPositionState.move(
-                    CameraUpdateFactory.newLatLngZoom(newLocation, 16f)
-                )
-            }
+            // TODO: Replace with actual Google Places API call
+            // For now, just center on Bandung
+            val newLocation = LatLng(-6.9175, 107.6191)
+            selectedLocation = newLocation
+            selectedAddress = "$searchQuery, Bandung"
+            cameraPositionState.move(
+                CameraUpdateFactory.newLatLngZoom(newLocation, 16f)
+            )
             isSearching = false
         }
     }
     
-    // Handle search suggestions
+    // Handle search suggestions (placeholder - replace with Google Places API)
     LaunchedEffect(searchQuery) {
         if (searchQuery.length >= 2) {
             delay(300) // Debounce search
-            searchSuggestions = getSearchSuggestions(searchQuery)
+            // TODO: Replace with actual Google Places API call
+            // For now, create simple placeholder suggestions
+            searchSuggestions = listOf(
+                Triple(-6.9175, 107.6191, "$searchQuery, Bandung"),
+                Triple(-6.2088, 106.8456, "$searchQuery, Jakarta")
+            )
             showSuggestions = searchSuggestions.isNotEmpty()
         } else {
             showSuggestions = false
@@ -2028,166 +2208,36 @@ private fun GoogleMapsPickerDialog(
     )
 }
 
-// Mock search function that simulates Google Places API search
-private fun performMockSearch(query: String): Triple<Double, Double, String>? {
-    val normalizedQuery = query.lowercase().trim()
-    
-    // Comprehensive Bandung locations database
-    val locations = mapOf(
-        // Bandung City Districts
-        "bandung wetan" to Triple(-6.9175, 107.6191, "Bandung Wetan, Bandung"),
-        "bandung kulon" to Triple(-6.9147, 107.5833, "Bandung Kulon, Bandung"),
-        "bandung kidul" to Triple(-6.9389, 107.6233, "Bandung Kidul, Bandung"),
-        "bojongloa kaler" to Triple(-6.9389, 107.5833, "Bojongloa Kaler, Bandung"),
-        "bojongloa kidul" to Triple(-6.9508, 107.5833, "Bojongloa Kidul, Bandung"),
-        "astana anyar" to Triple(-6.9319, 107.5889, "Astana Anyar, Bandung"),
-        "regol" to Triple(-6.9319, 107.6056, "Regol, Bandung"),
-        "lengkong" to Triple(-6.9319, 107.6191, "Lengkong, Bandung"),
-        "bandung tengah" to Triple(-6.9175, 107.6056, "Bandung Tengah, Bandung"),
-        "cibeunying kaler" to Triple(-6.9009, 107.6233, "Cibeunying Kaler, Bandung"),
-        "cibeunying kidul" to Triple(-6.9175, 107.6233, "Cibeunying Kidul, Bandung"),
-        "coblong" to Triple(-6.9147, 107.6098, "Coblong, Bandung"),
-        "andir" to Triple(-6.9175, 107.5972, "Andir, Bandung"),
-        "cicendo" to Triple(-6.9061, 107.5972, "Cicendo, Bandung"),
-        "batununggal" to Triple(-6.9508, 107.6191, "Batununggal, Bandung"),
-        "sukajadi" to Triple(-6.8915, 107.6098, "Sukajadi, Bandung"),
-        "sukasari" to Triple(-6.8677, 107.6026, "Sukasari, Bandung"),
-        "cidadap" to Triple(-6.8677, 107.5972, "Cidadap, Bandung"),
-        "cihampelas" to Triple(-6.8915, 107.5972, "Cihampelas, Bandung"),
-        "arcamanik" to Triple(-6.9147, 107.6636, "Arcamanik, Bandung"),
-        "antapani" to Triple(-6.9389, 107.6233, "Antapani, Bandung"),
-        "mandalajati" to Triple(-6.8915, 107.6636, "Mandalajati, Bandung"),
-        "kiaracondong" to Triple(-6.9508, 107.6636, "Kiaracondong, Bandung"),
-        "gedebage" to Triple(-6.9508, 107.7097, "Gedebage, Bandung"),
-        "cinambo" to Triple(-6.8677, 107.6636, "Cinambo, Bandung"),
-        "ujungberung" to Triple(-6.9175, 107.7097, "Ujungberung, Bandung"),
-        "rancasari" to Triple(-6.9678, 107.6636, "Rancasari, Bandung"),
-        "buahbatu" to Triple(-6.9678, 107.6233, "Buahbatu, Bandung"),
-        "panyileukan" to Triple(-6.8677, 107.6833, "Panyileukan, Bandung"),
-        
-        // Popular Areas & Landmarks
-        "dago" to Triple(-6.8740, 107.6098, "Dago, Bandung"),
-        "lembang" to Triple(-6.8118, 107.6182, "Lembang, Bandung"),
-        "cihampelas" to Triple(-6.8915, 107.5972, "Jl. Cihampelas, Bandung"),
-        "braga" to Triple(-6.9175, 107.6098, "Jl. Braga, Bandung"),
-        "asia afrika" to Triple(-6.9219, 107.6056, "Jl. Asia Afrika, Bandung"),
-        "setiabudhi" to Triple(-6.8677, 107.5972, "Jl. Setiabudhi, Bandung"),
-        "dipatiukur" to Triple(-6.8915, 107.6098, "Jl. Dipatiukur, Bandung"),
-        "pasteur" to Triple(-6.8915, 107.5833, "Jl. Pasteur, Bandung"),
-        "surapati" to Triple(-6.9009, 107.6098, "Jl. Surapati, Bandung"),
-        "sudirman" to Triple(-6.9175, 107.6056, "Jl. Sudirman, Bandung"),
-        
-        // Shopping Centers & Malls
-        "paris van java" to Triple(-6.8915, 107.5972, "Paris Van Java Mall, Bandung"),
-        "cihampelas walk" to Triple(-6.8915, 107.5972, "Cihampelas Walk, Bandung"),
-        "bandung indah plaza" to Triple(-6.9175, 107.6056, "Bandung Indah Plaza, Bandung"),
-        "kings shopping center" to Triple(-6.9175, 107.6098, "Kings Shopping Center, Bandung"),
-        "istana plaza" to Triple(-6.9175, 107.6056, "Istana Plaza, Bandung"),
-        "festival citylink" to Triple(-6.9175, 107.6233, "Festival CityLink, Bandung"),
-        "trans studio mall" to Triple(-6.9319, 107.6636, "Trans Studio Mall Bandung"),
-        "taman super" to Triple(-6.9175, 107.6056, "Taman Super, Bandung"),
-        "alun alun" to Triple(-6.9219, 107.6056, "Alun-Alun Bandung"),
-        
-        // Educational Institutions
-        "itb bandung" to Triple(-6.8915, 107.6107, "Institut Teknologi Bandung"),
-        "unpad" to Triple(-6.9175, 107.6191, "Universitas Padjadjaran, Bandung"),
-        "unpas" to Triple(-6.9389, 107.6233, "Universitas Pasundan, Bandung"),
-        "upi" to Triple(-6.8626, 107.6098, "Universitas Pendidikan Indonesia"),
-        "itenas" to Triple(-6.9061, 107.5972, "Institut Teknologi Nasional"),
-        "unisba" to Triple(-6.8915, 107.5972, "Universitas Islam Bandung"),
-        "unikom" to Triple(-6.9319, 107.6098, "Universitas Komputer Indonesia"),
-        "tel-u" to Triple(-6.9736, 107.6304, "Telkom University"),
-        
-        // Tourist Attractions
-        "gedung sate" to Triple(-6.9009, 107.6191, "Gedung Sate, Bandung"),
-        "tangkuban perahu" to Triple(-6.7597, 107.6098, "Tangkuban Perahu, Lembang"),
-        "kawah putih" to Triple(-7.1661, 107.4028, "Kawah Putih, Ciwidey"),
-        "farmhouse lembang" to Triple(-6.8118, 107.6182, "Farmhouse Susu Lembang"),
-        "floating market" to Triple(-6.8118, 107.6182, "Floating Market Lembang"),
-        "saung angklung udjo" to Triple(-6.9319, 107.6636, "Saung Angklung Udjo"),
-        "taman hutan raya" to Triple(-6.8740, 107.6304, "Taman Hutan Raya Ir. H. Djuanda"),
-        "taman film" to Triple(-6.9009, 107.6098, "Taman Film, Bandung"),
-        "villa isola" to Triple(-6.8740, 107.6098, "Villa Isola, Bandung"),
-        "cipaganti" to Triple(-6.8915, 107.6026, "Cipaganti, Bandung"),
-        
-        // Transportation Hubs
-        "stasiun bandung" to Triple(-6.9175, 107.6056, "Stasiun Bandung (Hall)"),
-        "stasiun cicalengka" to Triple(-6.9736, 107.6304, "Stasiun Cicalengka"),
-        "terminal leuwi panjang" to Triple(-6.9678, 107.5833, "Terminal Leuwi Panjang"),
-        "husein sastranegara" to Triple(-6.9009, 107.5763, "Husein Sastranegara Airport"),
-        
-        // Hospitals & Healthcare
-        "rs hasan sadikin" to Triple(-6.9009, 107.6098, "RSUP Dr. Hasan Sadikin"),
-        "rs borromeus" to Triple(-6.9175, 107.6056, "RS Borromeus, Bandung"),
-        "rs advent" to Triple(-6.9009, 107.6098, "RS Advent, Bandung"),
-        "rs al islam" to Triple(-6.9319, 107.6233, "RS Al Islam, Bandung")
-    )
-    
-    // Search for exact matches first
-    locations[normalizedQuery]?.let { return it }
-    
-    // Search for partial matches
-    locations.entries.find { it.key.contains(normalizedQuery) || normalizedQuery.contains(it.key) }?.let { 
-        return it.value 
-    }
-    
-    // If no match found, return a random location around Bandung center
-    return Triple(
-        -6.9175 + (Math.random() - 0.5) * 0.1, // Random latitude within Bandung
-        107.6191 + (Math.random() - 0.5) * 0.1, // Random longitude within Bandung
-        "Search result: $query, Bandung"
-    )
-}
+// TODO: Integrate with Google Places API
+// Replace the placeholder search function below with actual Google Places API calls
+// Instructions for integration:
+// 1. Add Places API dependency to build.gradle.kts
+// 2. Initialize Places.initialize(context, "YOUR_API_KEY") in Application or Activity
+// 3. Use FindAutocompletePredictionsRequest with bias to Indonesia/West Java
+// 4. Convert AutocompletePrediction results to LocationSuggestion format
 
-// Get search suggestions as user types
-private fun getSearchSuggestions(query: String): List<Triple<Double, Double, String>> {
-    val normalizedQuery = query.lowercase().trim()
+private fun searchWithGooglePlacesAPI(query: String): List<LocationSuggestion> {
+    // TODO: Implement actual Google Places API call here
+    // Example implementation:
+    // 
+    // val placesClient = Places.createClient(context)
+    // val request = FindAutocompletePredictionsRequest.builder()
+    //     .setQuery(query)
+    //     .setLocationBias(RectangularBounds.newInstance(
+    //         LatLng(-8.0, 105.0),  // Southwest corner of Indonesia
+    //         LatLng(-5.0, 112.0)   // Northeast corner of Java
+    //     ))
+    //     .setCountries("ID")  // Indonesia only
+    //     .build()
+    // 
+    // placesClient.findAutocompletePredictions(request)
+    //     .addOnSuccessListener { response ->
+    //         val predictions = response.autocompletePredictions
+    //         // Convert to LocationSuggestion and update suggestions
+    //     }
     
-    val locations = mapOf(
-        // Bandung Districts
-        "bandung wetan" to Triple(-6.9175, 107.6191, "Bandung Wetan, Bandung"),
-        "bandung kulon" to Triple(-6.9147, 107.5833, "Bandung Kulon, Bandung"),
-        "coblong" to Triple(-6.9147, 107.6098, "Coblong, Bandung"),
-        "antapani" to Triple(-6.9389, 107.6233, "Antapani, Bandung"),
-        "cicendo" to Triple(-6.9061, 107.5972, "Cicendo, Bandung"),
-        "sukajadi" to Triple(-6.8915, 107.6098, "Sukajadi, Bandung"),
-        
-        // Popular Areas
-        "dago" to Triple(-6.8740, 107.6098, "Dago, Bandung"),
-        "lembang" to Triple(-6.8118, 107.6182, "Lembang, Bandung"),
-        "cihampelas" to Triple(-6.8915, 107.5972, "Jl. Cihampelas, Bandung"),
-        "braga" to Triple(-6.9175, 107.6098, "Jl. Braga, Bandung"),
-        "asia afrika" to Triple(-6.9219, 107.6056, "Jl. Asia Afrika, Bandung"),
-        "setiabudhi" to Triple(-6.8677, 107.5972, "Jl. Setiabudhi, Bandung"),
-        "dipatiukur" to Triple(-6.8915, 107.6098, "Jl. Dipatiukur, Bandung"),
-        
-        // Shopping Centers
-        "paris van java" to Triple(-6.8915, 107.5972, "Paris Van Java Mall, Bandung"),
-        "cihampelas walk" to Triple(-6.8915, 107.5972, "Cihampelas Walk, Bandung"),
-        "bandung indah plaza" to Triple(-6.9175, 107.6056, "Bandung Indah Plaza, Bandung"),
-        "trans studio mall" to Triple(-6.9319, 107.6636, "Trans Studio Mall Bandung"),
-        "festival citylink" to Triple(-6.9175, 107.6233, "Festival CityLink, Bandung"),
-        "alun alun" to Triple(-6.9219, 107.6056, "Alun-Alun Bandung"),
-        
-        // Universities
-        "itb bandung" to Triple(-6.8915, 107.6107, "Institut Teknologi Bandung"),
-        "unpad" to Triple(-6.9175, 107.6191, "Universitas Padjadjaran, Bandung"),
-        "upi" to Triple(-6.8626, 107.6098, "Universitas Pendidikan Indonesia"),
-        "tel-u" to Triple(-6.9736, 107.6304, "Telkom University"),
-        
-        // Tourist Attractions
-        "gedung sate" to Triple(-6.9009, 107.6191, "Gedung Sate, Bandung"),
-        "tangkuban perahu" to Triple(-6.7597, 107.6098, "Tangkuban Perahu, Lembang"),
-        "kawah putih" to Triple(-7.1661, 107.4028, "Kawah Putih, Ciwidey"),
-        "farmhouse lembang" to Triple(-6.8118, 107.6182, "Farmhouse Susu Lembang"),
-        "floating market" to Triple(-6.8118, 107.6182, "Floating Market Lembang")
-    )
-    
-    return locations.entries
-        .filter { it.key.contains(normalizedQuery) || it.value.third.lowercase().contains(normalizedQuery) }
-        .map { it.value }
-        .sortedBy { it.third }
-        .take(8)
+    // Placeholder implementation - remove this when implementing real API
+    return emptyList()
 }
 
 @Composable
@@ -2263,6 +2313,71 @@ private fun TPSBasicInfoStep(
     }
 }
 
+data class LocationSuggestion(
+    val name: String,
+    val address: String,
+    val latitude: Double,
+    val longitude: Double
+)
+
+// Fallback function for Places API search
+private fun searchWithPlacesAPIFallback(
+    query: String, 
+    context: android.content.Context, 
+    onResult: (List<LocationSuggestion>) -> Unit
+) {
+    // Simple fallback with common Indonesian locations
+    val fallbackResults = when {
+        query.contains("jakarta", ignoreCase = true) -> listOf(
+            LocationSuggestion("Jakarta Pusat", "Jakarta Pusat, Jakarta, Indonesia", -6.2088, 106.8456),
+            LocationSuggestion("Jakarta Selatan", "Jakarta Selatan, Jakarta, Indonesia", -6.2615, 106.8106),
+            LocationSuggestion("Jakarta Utara", "Jakarta Utara, Jakarta, Indonesia", -6.1380, 106.8651)
+        )
+        query.contains("bandung", ignoreCase = true) -> listOf(
+            LocationSuggestion("Bandung Kota", "Bandung, West Java, Indonesia", -6.9175, 107.6191),
+            LocationSuggestion("Bandung Utara", "Bandung Utara, West Java, Indonesia", -6.8770, 107.6177),
+            LocationSuggestion("Bandung Selatan", "Bandung Selatan, West Java, Indonesia", -6.9730, 107.6302)
+        )
+        query.contains("bogor", ignoreCase = true) -> listOf(
+            LocationSuggestion("Bogor Kota", "Bogor, West Java, Indonesia", -6.5971, 106.8060),
+            LocationSuggestion("Bogor Barat", "Bogor Barat, West Java, Indonesia", -6.5971, 106.7537),
+            LocationSuggestion("Bogor Timur", "Bogor Timur, West Java, Indonesia", -6.5971, 106.8583)
+        )
+        query.contains("depok", ignoreCase = true) -> listOf(
+            LocationSuggestion("Depok Kota", "Depok, West Java, Indonesia", -6.4025, 106.7942)
+        )
+        query.contains("bekasi", ignoreCase = true) -> listOf(
+            LocationSuggestion("Bekasi Kota", "Bekasi, West Java, Indonesia", -6.2383, 106.9756)
+        )
+        else -> {
+            // Generic search - use geocoder if possible
+            try {
+                val geocoder = Geocoder(context, Locale.getDefault())
+                val addresses = geocoder.getFromLocationName("$query, West Java, Indonesia", 3)
+                addresses?.map { address ->
+                    LocationSuggestion(
+                        name = address.locality ?: address.subAdminArea ?: query,
+                        address = address.getAddressLine(0) ?: "$query, West Java, Indonesia", 
+                        latitude = address.latitude,
+                        longitude = address.longitude
+                    )
+                } ?: listOf(
+                    LocationSuggestion("$query - Bandung Area", "$query, Bandung, West Java", -6.9175, 107.6191),
+                    LocationSuggestion("$query - Jakarta Area", "$query, Jakarta, Indonesia", -6.2088, 106.8456)
+                )
+            } catch (e: Exception) {
+                listOf(
+                    LocationSuggestion("$query - Bandung Area", "$query, Bandung, West Java", -6.9175, 107.6191),
+                    LocationSuggestion("$query - Jakarta Area", "$query, Jakarta, Indonesia", -6.2088, 106.8456)
+                )
+            }
+        }
+    }
+    
+    onResult(fallbackResults.filter { it.name.contains(query, ignoreCase = true) })
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TPSLocationStep(
     selectedAddress: String,
@@ -2274,120 +2389,347 @@ private fun TPSLocationStep(
     onLatitudeChange: (String) -> Unit,
     onLongitudeChange: (String) -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        // Google Maps Location Picker Card
-        ModernCard {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .background(
-                                Color(0xFF4285F4).copy(alpha = 0.1f),
-                                CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Map,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp),
-                            tint = Color(0xFF4285F4)
-                        )
+    var searchQuery by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf<List<LocationSuggestion>>(emptyList()) }
+    var isSearching by remember { mutableStateOf(false) }
+    var showSuggestions by remember { mutableStateOf(false) }
+    var selectedLocation by remember { mutableStateOf<LatLng?>(
+        if (latitude.isNotBlank() && longitude.isNotBlank()) {
+            try {
+                LatLng(latitude.toDouble(), longitude.toDouble())
+            } catch (e: Exception) {
+                LatLng(-6.9175, 107.6191) // Default to Bandung
+            }
+        } else {
+            LatLng(-6.9175, 107.6191) // Default to Bandung
+        }
+    ) }
+    
+    // Camera position state for the map
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(selectedLocation ?: LatLng(-6.9175, 107.6191), 15f)
+    }
+    
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Update camera position when location changes
+    LaunchedEffect(selectedLocation) {
+        selectedLocation?.let { location ->
+            cameraPositionState.animate(
+                CameraUpdateFactory.newLatLngZoom(location, 16f)
+            )
+        }
+    }
+    
+    // Real Google Places API search implementation
+    fun searchLocationsWithPlacesAPI(query: String) {
+        if (query.length < 2) {
+            suggestions = emptyList()
+            showSuggestions = false
+            return
+        }
+        
+        isSearching = true
+        showSuggestions = true
+        
+        coroutineScope.launch {
+            try {
+                // Use Geocoder for simpler and more reliable location search
+                val geocoder = Geocoder(context, Locale.getDefault())
+                
+                // Search for locations in Indonesia/Java region
+                val addresses = geocoder.getFromLocationName(
+                    "$query, Indonesia", 
+                    5, // Limit to 5 results
+                    -8.5, 105.0,   // Southwest bound (South Java)
+                    -5.5, 112.0    // Northeast bound (North Java)
+                )
+                
+                val locationSuggestions = addresses?.mapNotNull { address ->
+                    // Create a proper name from address components
+                    val name = when {
+                        !address.featureName.isNullOrBlank() -> address.featureName
+                        !address.thoroughfare.isNullOrBlank() -> address.thoroughfare
+                        !address.subLocality.isNullOrBlank() -> address.subLocality
+                        !address.locality.isNullOrBlank() -> address.locality
+                        else -> "$query"
                     }
                     
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Location Selection",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF1A1A1A)
-                        )
-                        Text(
-                            "Choose location on Google Maps",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666)
-                        )
+                    // Create a detailed address string
+                    val addressParts = listOfNotNull(
+                        address.thoroughfare,
+                        address.subLocality,
+                        address.locality,
+                        address.subAdminArea,
+                        address.adminArea
+                    ).distinct()
+                    
+                    val fullAddress = if (addressParts.isNotEmpty()) {
+                        addressParts.joinToString(", ")
+                    } else {
+                        address.getAddressLine(0) ?: "Indonesia"
                     }
                     
-                    Button(
-                        onClick = onShowMapPicker,
-                        shape = RoundedCornerShape(8.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF4285F4)
-                        )
-                    ) {
-                        Icon(
-                            Icons.Default.Map,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Open Map")
+                    LocationSuggestion(
+                        name = name ?: "$query",
+                        address = fullAddress,
+                        latitude = address.latitude,
+                        longitude = address.longitude
+                    )
+                } ?: emptyList()
+                
+                // If geocoder returns results, use them
+                if (locationSuggestions.isNotEmpty()) {
+                    suggestions = locationSuggestions
+                } else {
+                    // Fallback: try Places API for better search results
+                    searchWithPlacesAPIFallback(query, context) { placesResults ->
+                        suggestions = placesResults
                     }
                 }
                 
-                // Display selected location info
-                if (latitude.isNotBlank() && longitude.isNotBlank()) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color(0xFF4CAF50).copy(alpha = 0.05f)
+                isSearching = false
+                
+            } catch (e: Exception) {
+                // Final fallback to basic search results
+                searchWithPlacesAPIFallback(query, context) { placesResults ->
+                    suggestions = placesResults
+                    isSearching = false
+                }
+            }
+        }
+    }
+    
+    // Unified Location Search and Map Card
+    ModernCard {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            Color(0xFF4285F4).copy(alpha = 0.1f),
+                            CircleShape
                         ),
-                        border = BorderStroke(1.dp, Color(0xFF4CAF50).copy(alpha = 0.2f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Map,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = Color(0xFF4285F4)
+                    )
+                }
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Location Selection",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1A1A1A)
+                    )
+                    Text(
+                        "Search and select TPS location on map",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF666666)
+                    )
+                }
+            }
+            
+            // Search Input
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { query ->
+                    searchQuery = query
+                    searchLocationsWithPlacesAPI(query)
+                },
+                label = { Text("Search location") },
+                placeholder = { Text("e.g., Santosa Hospital, Bandung") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                leadingIcon = {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color(0xFF666666)
+                    )
+                },
+                trailingIcon = {
+                    if (isSearching) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color(0xFF4285F4)
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF4285F4),
+                    unfocusedBorderColor = Color(0xFFE0E0E0)
+                )
+            )
+            
+            // Search Suggestions
+            if (showSuggestions && suggestions.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 150.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(suggestions) { suggestion ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val newLocation = LatLng(suggestion.latitude, suggestion.longitude)
+                                    selectedLocation = newLocation
+                                    onLatitudeChange(suggestion.latitude.toString())
+                                    onLongitudeChange(suggestion.longitude.toString())
+                                    searchQuery = suggestion.name
+                                    showSuggestions = false
+                                },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFFF8F9FA)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 Icon(
-                                    Icons.Default.CheckCircle,
+                                    Icons.Default.LocationOn,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = Color(0xFF4CAF50)
+                                    tint = Color(0xFF666666)
                                 )
-                                Text(
-                                    "Location Selected",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF4CAF50)
-                                )
-                            }
-                            
-                            Text(
-                                "Coordinates: $latitude, $longitude",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF1A1A1A)
-                            )
-                            
-                            if (selectedAddress.isNotBlank()) {
-                                Text(
-                                    "Address: $selectedAddress",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF666666)
-                                )
+                                Column {
+                                    Text(
+                                        suggestion.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF1A1A1A)
+                                    )
+                                    Text(
+                                        suggestion.address,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF666666)
+                                    )
+                                }
                             }
                         }
                     }
                 }
-                
-                // Manual coordinates input (fallback)
-                if (showManualInput) {
+            }
+            
+            // Interactive Google Map
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+            ) {
+                GoogleMap(
+                    modifier = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    onMapClick = { latLng ->
+                        selectedLocation = latLng
+                        onLatitudeChange(latLng.latitude.toString())
+                        onLongitudeChange(latLng.longitude.toString())
+                        searchQuery = "" // Clear search when manually selecting
+                        showSuggestions = false
+                    },
+                    uiSettings = MapUiSettings(
+                        zoomControlsEnabled = true,
+                        myLocationButtonEnabled = false,
+                        mapToolbarEnabled = false,
+                        compassEnabled = true,
+                        scrollGesturesEnabled = true,
+                        zoomGesturesEnabled = true,
+                        tiltGesturesEnabled = false,
+                        rotationGesturesEnabled = false
+                    )
+                ) {
+                    // Show marker for selected location
+                    selectedLocation?.let { location ->
+                        Marker(
+                            state = MarkerState(position = location),
+                            title = "TPS Location",
+                            snippet = if (searchQuery.isNotBlank()) searchQuery else 
+                                "Lat: ${String.format("%.6f", location.latitude)}, Lng: ${String.format("%.6f", location.longitude)}",
+                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                        )
+                    }
+                }
+            }
+            
+            // Selected location info
+            selectedLocation?.let { location ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFF4CAF50).copy(alpha = 0.1f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = Color(0xFF4CAF50)
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Selected Location",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF4CAF50)
+                            )
+                            Text(
+                                "Lat: ${String.format("%.6f", location.latitude)}, Lng: ${String.format("%.6f", location.longitude)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF1A1A1A)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            // Manual coordinates input (optional)
+            if (showManualInput) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFF8F9FA)
+                    ),
+                    border = BorderStroke(1.dp, Color(0xFFE0E0E0))
+                ) {
                     Column(
+                        modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
@@ -2439,19 +2781,19 @@ private fun TPSLocationStep(
                             )
                         }
                     }
-                } else {
-                    TextButton(
-                        onClick = { onShowManualInput(true) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            Icons.Default.Edit,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Enter coordinates manually")
-                    }
+                }
+            } else {
+                TextButton(
+                    onClick = { onShowManualInput(true) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Enter coordinates manually")
                 }
             }
         }

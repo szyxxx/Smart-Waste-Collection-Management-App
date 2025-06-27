@@ -5,14 +5,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -20,6 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.bluebin.data.model.User
 import com.bluebin.data.model.UserRole
+import com.bluebin.ui.components.ModernTabRow
+import com.bluebin.ui.theme.SuccessColor
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -30,8 +37,9 @@ fun UserManagementScreen(
     viewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var selectedTab by remember { mutableStateOf(0) }
-    val tabs = listOf("Pending Approval", "All Users", "Statistics")
+    val tabs = listOf("Pending", "All Users", "Statistics")
+    val pagerState = rememberPagerState(pageCount = { tabs.size })
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel.clearMessage()
@@ -40,110 +48,13 @@ fun UserManagementScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        // Modern Header
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = Color.White,
-            shadowElevation = 2.dp
-        ) {
-            Column {
-                // Status bar spacer
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = onNavigateBack,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(Color(0xFFF5F5F5), CircleShape)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF666666)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = "User Management",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1A1A1A)
-                        )
-                        Text(
-                            text = "Manage user approvals and roles",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF666666)
-                        )
-                    }
-                    
-
-                    
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(
-                            onClick = { viewModel.loadDashboardData() },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(0xFFF5F5F5), CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Default.Refresh,
-                                contentDescription = "Refresh",
-                                tint = Color(0xFF666666)
-                            )
-                        }
-                        
-                        IconButton(
-                            onClick = { viewModel.seedSampleData() },
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(Color(0xFFE3F2FD), CircleShape)
-                        ) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Seed Data",
-                                tint = Color(0xFF2196F3)
-                            )
-                        }
-                    }
-                }
-
-                // Modern Tab Row
-                PrimaryTabRow(
-                    selectedTabIndex = selectedTab,
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF4CAF50)
-                ) {
-                    tabs.forEachIndexed { index, title ->
-                        Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
-                            text = { 
-                                Text(
-                                    title,
-                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selectedTab == index) Color(0xFF4CAF50) else Color(0xFF666666)
-                                ) 
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        // Modern Header with gradient
+        ModernUserHeader(
+            onNavigateBack = onNavigateBack,
+            onRefresh = { viewModel.loadDashboardData() }
+        )
 
         // Status Messages
         uiState.message?.let { message ->
@@ -162,27 +73,176 @@ fun UserManagementScreen(
             )
         }
 
+        // Tab Navigation
+        ModernTabRow(
+            selectedTabIndex = pagerState.currentPage,
+            tabs = tabs,
+            onTabSelected = { index ->
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(index)
+                }
+            }
+        )
+
         // Loading Indicator
         if (uiState.isLoading) {
             ModernLoadingIndicator()
         }
 
-        // Tab Content
-        when (selectedTab) {
-            0 -> PendingApprovalTab(
-                users = uiState.users.filter { !it.approved },
-                onApprove = viewModel::approveUser,
-                onReject = viewModel::rejectUser,
-                isLoading = uiState.isLoading
+        // Swipeable Content
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxSize()
+        ) { page ->
+            when (page) {
+                0 -> PendingApprovalTab(
+                    users = uiState.users.filter { !it.approved },
+                    onApprove = viewModel::approveUser,
+                    onReject = viewModel::rejectUser,
+                    isLoading = uiState.isLoading
+                )
+                1 -> AllUsersTab(
+                    users = uiState.users,
+                    isLoading = uiState.isLoading
+                )
+                2 -> UserStatisticsTab(
+                    users = uiState.users,
+                    stats = uiState.stats
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModernUserHeader(
+    onNavigateBack: () -> Unit,
+    onRefresh: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                )
             )
-            1 -> AllUsersTab(
-                users = uiState.users,
-                isLoading = uiState.isLoading
-            )
-            2 -> UserStatisticsTab(
-                users = uiState.users,
-                stats = uiState.stats
-            )
+    ) {
+        Column {
+            // Status bar spacer
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Title row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = onNavigateBack,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.width(16.dp))
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        text = "👥",
+                        style = MaterialTheme.typography.headlineLarge
+                    )
+                    Column {
+                        Text(
+                            text = "User Management",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Text(
+                            text = "User Control",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+                
+                // Action buttons
+                IconButton(
+                    onClick = onRefresh,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f), 
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.Refresh, 
+                        contentDescription = "Refresh",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            
+            // Status indicator row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp)
+                    .padding(bottom = 20.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Manage user approvals and roles",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
+                )
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(SuccessColor, CircleShape)
+                        )
+                        Text(
+                            text = "User Management",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -6,7 +6,10 @@ import com.bluebin.data.repository.ScheduleRepository
 import com.bluebin.data.repository.AuthRepository
 import com.bluebin.data.repository.UserRepository
 import com.bluebin.data.repository.TPSRepository
+import com.bluebin.data.storage.CloudStorageService
 import com.bluebin.data.model.*
+import com.google.firebase.firestore.GeoPoint
+import android.net.Uri
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +26,8 @@ class DriverViewModel @Inject constructor(
     private val scheduleRepository: ScheduleRepository,
     private val authRepository: AuthRepository,
     private val userRepository: UserRepository,
-    private val tpsRepository: TPSRepository
+    private val tpsRepository: TPSRepository,
+    private val cloudStorageService: CloudStorageService
 ) : ViewModel() {
 
     companion object {
@@ -93,9 +97,12 @@ class DriverViewModel @Inject constructor(
                     val dailyStats = generateDailyStats(todaySchedules, driverSchedules)
                     
                     // Generate collection records
-                    val collectionRecords = generateCollectionRecords(driverSchedules.filter { 
-                        it.status == ScheduleStatus.COMPLETED 
-                    }.take(10))
+                    val collectionRecords = generateCollectionRecords(
+                        driverSchedules.filter { 
+                            it.status == ScheduleStatus.COMPLETED 
+                        }.take(10),
+                        allTPS
+                    )
                     
                     _uiState.value = _uiState.value.copy(
                         currentRoute = routeAssignment,
@@ -131,6 +138,20 @@ class DriverViewModel @Inject constructor(
                 val currentSchedule = _uiState.value.currentSchedule
                 if (currentSchedule != null && currentSchedule.status == ScheduleStatus.ASSIGNED) {
                     Log.d(TAG, "Starting schedule: ${currentSchedule.scheduleId}")
+                    
+                    // Check if driver can start the schedule based on assigned date
+                    val canStart = scheduleRepository.canDriverStartSchedule(currentSchedule.scheduleId)
+                    
+                    if (!canStart) {
+                        val assignedDate = currentSchedule.assignedDate?.toDate()
+                        val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                        val dateStr = assignedDate?.let { formatter.format(it) } ?: "the assigned date"
+                        
+                        _uiState.value = _uiState.value.copy(
+                            error = "You can only start this schedule on or after $dateStr. Please wait until the assigned date."
+                        )
+                        return@launch
+                    }
                     
                     // Update schedule status to IN_PROGRESS
                     val success = scheduleRepository.updateScheduleStatus(currentSchedule.scheduleId, ScheduleStatus.IN_PROGRESS)
@@ -177,13 +198,111 @@ class DriverViewModel @Inject constructor(
                 val currentSchedule = _uiState.value.currentSchedule
                 
                 if (currentRoute != null && currentSchedule != null && stopIndex < currentRoute.stops.size) {
+                    val completedStop = currentRoute.stops[stopIndex]
+                    
+                    // Upload photo to Firebase Storage if provided
+                    var cloudPhotoUrl: String? = null
+                    if (!proofPhoto.isNullOrEmpty() && proofPhoto != "content://") {
+                        Log.d(TAG, "Attempting to upload photo: $proofPhoto")
+                        try {
+                            val photoUri = Uri.parse(proofPhoto)
+                            val uploadResult = cloudStorageService.uploadProofPhoto(
+                                photoUri = photoUri,
+                                driverId = currentSchedule.driverId,
+                                scheduleId = currentSchedule.scheduleId,
+                                tpsId = completedStop.id
+                            )
+                            
+                            if (uploadResult.isSuccess) {
+                                cloudPhotoUrl = uploadResult.getOrNull()
+                                Log.d(TAG, "Photo processed successfully (temporary local storage): $cloudPhotoUrl")
+                            } else {
+                                Log.w(TAG, "Failed to process photo: ${uploadResult.exceptionOrNull()?.message}")
+                                Log.d(TAG, "Continuing collection without photo storage")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Exception during photo processing", e)
+                            // Continue without photo if processing completely fails
+                            Log.d(TAG, "Continuing collection without photo storage due to exception")
+                        }
+                    } else {
+                        Log.d(TAG, "No photo provided or invalid photo URI")
+                    }
+                    
+                    val completedAt = System.currentTimeMillis()
                     val updatedStops = currentRoute.stops.toMutableList()
                     updatedStops[stopIndex] = updatedStops[stopIndex].copy(
                         isCompleted = true,
-                        completedAt = System.currentTimeMillis(),
-                        proofPhoto = proofPhoto,
+                        completedAt = completedAt,
+                        proofPhoto = cloudPhotoUrl,
                         notes = notes
                     )
+                    
+                    // Store completion data in the schedule collection
+                    val stopCompletion = RouteStopCompletion(
+                        tpsId = completedStop.id,
+                        completedAt = completedAt,
+                        proofPhotoUrl = cloudPhotoUrl,
+                        notes = notes,
+                        hasIssue = false,
+                        driverLocation = mapOf(
+                            "latitude" to completedStop.latitude,
+                            "longitude" to completedStop.longitude
+                        )
+                    )
+                    
+                    try {
+                        val scheduleUpdateSuccess = scheduleRepository.updateScheduleStopCompletion(
+                            currentSchedule.scheduleId, 
+                            stopCompletion
+                        )
+                        if (scheduleUpdateSuccess) {
+                            Log.d(TAG, "✅ Successfully stored completion data in schedule collection")
+                        } else {
+                            Log.w(TAG, "⚠️ Failed to store completion data in schedule collection")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error storing completion data in schedule collection", e)
+                    }
+                    
+                    // Update TPS status to TIDAK_PENUH after collection
+                    Log.d(TAG, "=== TPS STATUS UPDATE DEBUG ===")
+                    Log.d(TAG, "TPS ID to update: ${completedStop.id}")
+                    Log.d(TAG, "TPS Name: ${completedStop.name}")
+                    Log.d(TAG, "TPS Address: ${completedStop.address}")
+                    Log.d(TAG, "Stop Index: $stopIndex / ${updatedStops.size}")
+                    
+                    try {
+                        val updateResult = tpsRepository.updateTPSStatus(completedStop.id, TPSStatus.TIDAK_PENUH)
+                        if (updateResult.isSuccess) {
+                            Log.d(TAG, "✅ SUCCESS: TPS ${completedStop.id} status updated to TIDAK_PENUH (available)")
+                            
+                            // Verify the update by fetching the TPS
+                            viewModelScope.launch {
+                                try {
+                                    val tpsResult = tpsRepository.getTPSById(completedStop.id)
+                                    if (tpsResult.isSuccess) {
+                                        val tpsDoc = tpsResult.getOrNull()
+                                        if (tpsDoc != null) {
+                                            Log.d(TAG, "✅ VERIFICATION: TPS ${completedStop.id} current status: ${tpsDoc.status}")
+                                        } else {
+                                            Log.w(TAG, "⚠️ VERIFICATION: TPS ${completedStop.id} document not found")
+                                        }
+                                    } else {
+                                        Log.e(TAG, "❌ VERIFICATION: Failed to fetch TPS ${completedStop.id}: ${tpsResult.exceptionOrNull()?.message}")
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ VERIFICATION ERROR: ${e.message}", e)
+                                }
+                            }
+                        } else {
+                            val error = updateResult.exceptionOrNull()
+                            Log.e(TAG, "❌ FAILED: Could not update TPS ${completedStop.id} status. Error: ${error?.message}", error)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ EXCEPTION: Error updating TPS ${completedStop.id} status", e)
+                    }
+                    Log.d(TAG, "=== END TPS STATUS UPDATE DEBUG ===")
                     
                     val completedCount = updatedStops.count { it.isCompleted }
                     val progress = (completedCount * 100) / updatedStops.size
@@ -196,7 +315,7 @@ class DriverViewModel @Inject constructor(
                     
                     _uiState.value = _uiState.value.copy(
                         currentRoute = updatedRoute,
-                        message = "Collection point completed!"
+                        message = "Collection point completed! TPS marked as available."
                     )
                     
                     // If all stops completed, finish the schedule
@@ -221,11 +340,22 @@ class DriverViewModel @Inject constructor(
             val success = scheduleRepository.updateScheduleStatus(schedule.scheduleId, ScheduleStatus.COMPLETED)
             
             if (success) {
-                // Add to collection records
+                // Add to collection records using current route's TPS data
                 val currentRoute = _uiState.value.currentRoute
+                val tpsStops = currentRoute?.stops?.map { routeStop ->
+                    // Convert RouteStop back to TPS for collection record
+                    TPS(
+                        tpsId = routeStop.id,
+                        name = routeStop.name,
+                        address = routeStop.address,
+                        location = GeoPoint(routeStop.latitude, routeStop.longitude)
+                    )
+                } ?: emptyList()
+                
                 val newRecord = CollectionRecord(
                     id = "record_${System.currentTimeMillis()}",
-                    routeId = currentRoute?.routeId ?: "ROUTE_${schedule.tpsRoute.size}",
+                    schedule = schedule,
+                    tpsStops = tpsStops,
                     date = formatDate(System.currentTimeMillis()),
                     totalStops = schedule.tpsRoute.size,
                     completedStops = schedule.tpsRoute.size,
@@ -338,10 +468,26 @@ class DriverViewModel @Inject constructor(
             currentLocation = null
         )
     }
+    
+    suspend fun uploadDriverPhoto(photoUri: Uri): Result<String> {
+        return try {
+            val currentUserId = authRepository.getCurrentUserId()
+            if (currentUserId != null) {
+                cloudStorageService.uploadDriverPhoto(photoUri, currentUserId)
+            } else {
+                Result.failure(Exception("User not authenticated"))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploading driver photo", e)
+            Result.failure(e)
+        }
+    }
 
     fun startNavigation() {
         _uiState.value = _uiState.value.copy(isNavigationActive = true)
         Log.d(TAG, "Navigation started")
+        // Verify TPS documents for debugging
+        verifyTPSDocuments()
     }
     
     fun stopNavigation() {
@@ -368,10 +514,70 @@ class DriverViewModel @Inject constructor(
         Log.d(TAG, "Refreshing driver data")
         loadDriverData()
     }
+    
+    // Debug method to test TPS status update
+    fun testTPSStatusUpdate(tpsId: String) {
+        viewModelScope.launch {
+            Log.d(TAG, "Testing TPS status update for ID: $tpsId")
+            try {
+                val updateResult = tpsRepository.updateTPSStatus(tpsId, TPSStatus.TIDAK_PENUH)
+                if (updateResult.isSuccess) {
+                    Log.d(TAG, "TEST SUCCESS: TPS $tpsId status updated to TIDAK_PENUH")
+                } else {
+                    val error = updateResult.exceptionOrNull()
+                    Log.e(TAG, "TEST FAILED: Could not update TPS $tpsId status. Error: ${error?.message}", error)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "TEST EXCEPTION: Error updating TPS $tpsId status", e)
+            }
+        }
+    }
+    
+    // Debug method to verify TPS document existence
+    fun verifyTPSDocuments() {
+        viewModelScope.launch {
+            Log.d(TAG, "=== VERIFYING TPS DOCUMENTS ===")
+            try {
+                val allTPS = tpsRepository.getAllTPS().getOrNull() ?: emptyList()
+                Log.d(TAG, "Found ${allTPS.size} TPS documents in database:")
+                allTPS.forEach { tps ->
+                    Log.d(TAG, "  - TPS ID: ${tps.tpsId}, Name: ${tps.name}, Status: ${tps.status}")
+                }
+                
+                val currentSchedule = _uiState.value.currentSchedule
+                if (currentSchedule != null) {
+                    Log.d(TAG, "Current schedule TPS route: ${currentSchedule.tpsRoute}")
+                    currentSchedule.tpsRoute.forEach { scheduleTPSId ->
+                        val found = allTPS.find { it.tpsId == scheduleTPSId }
+                        if (found != null) {
+                            Log.d(TAG, "  ✓ Schedule TPS ID $scheduleTPSId matches database TPS: ${found.name}")
+                        } else {
+                            Log.e(TAG, "  ✗ Schedule TPS ID $scheduleTPSId NOT FOUND in database!")
+                        }
+                    }
+                } else {
+                    Log.d(TAG, "No current schedule to verify")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error verifying TPS documents", e)
+            }
+            Log.d(TAG, "=== END TPS VERIFICATION ===")
+        }
+    }
 
     private fun generateRouteAssignment(schedule: Schedule, allTPS: List<TPS>): RouteAssignment {
+        Log.d(TAG, "Generating route assignment for schedule: ${schedule.scheduleId}")
+        Log.d(TAG, "Schedule TPS route: ${schedule.tpsRoute}")
+        Log.d(TAG, "Available TPS in database: ${allTPS.map { "${it.tpsId} (${it.name})" }}")
+        
         val stops = schedule.tpsRoute.mapIndexed { index, tpsId ->
             val tps = allTPS.find { it.tpsId == tpsId }
+            if (tps == null) {
+                Log.w(TAG, "TPS not found in database for ID: $tpsId")
+            } else {
+                Log.d(TAG, "Found TPS for ID $tpsId: ${tps.name}")
+            }
+            
             RouteStop(
                 id = tpsId,
                 name = tps?.name ?: "Collection Point $tpsId",
@@ -422,11 +628,16 @@ class DriverViewModel @Inject constructor(
         )
     }
 
-    private fun generateCollectionRecords(completedSchedules: List<Schedule>): List<CollectionRecord> {
+    private fun generateCollectionRecords(completedSchedules: List<Schedule>, allTPS: List<TPS>): List<CollectionRecord> {
         return completedSchedules.map { schedule ->
+            val tpsStops = schedule.tpsRoute.mapNotNull { tpsId ->
+                allTPS.find { it.tpsId == tpsId }
+            }
+            
             CollectionRecord(
                 id = schedule.scheduleId,
-                routeId = "ROUTE_${schedule.scheduleId.takeLast(6)}",
+                schedule = schedule,
+                tpsStops = tpsStops,
                 date = formatDate(schedule.completedAt ?: schedule.createdAt),
                 totalStops = schedule.tpsRoute.size,
                 completedStops = schedule.tpsRoute.size,
@@ -506,7 +717,8 @@ data class DailyStats(
 
 data class CollectionRecord(
     val id: String,
-    val routeId: String,
+    val schedule: Schedule,
+    val tpsStops: List<TPS> = emptyList(),
     val date: String,
     val totalStops: Int,
     val completedStops: Int,

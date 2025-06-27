@@ -52,6 +52,29 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/license.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/notice.txt",
+                "META-INF/ASL2.0",
+                "META-INF/*.kotlin_module",
+                "META-INF/INDEX.LIST",
+                "META-INF/MANIFEST.MF",
+                "google/type/*.proto",
+                "google/api/*.proto",
+                "google/rpc/*.proto",
+                "google/longrunning/*.proto",
+                "google/protobuf/*.proto"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -86,6 +109,7 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
+    implementation("com.google.android.libraries.places:places:3.3.0")
     
     // Google Maps Compose
     implementation("com.google.maps.android:maps-compose:4.4.1")
@@ -102,6 +126,12 @@ dependencies {
     
     // Image Loading
     implementation(libs.coil.compose)
+    
+    // Google Cloud Storage using REST API (Android-compatible)
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.15.0")
+    
+    // JSON parsing for service account
+    implementation("com.google.code.gson:gson:2.10.1")
     
     // Permissions
     implementation(libs.accompanist.permissions)

@@ -52,7 +52,11 @@ class AdminDashboardViewModel @Inject constructor(
             
             try {
                 // Load all data in parallel
+                android.util.Log.d("AdminDashboard", "Starting to load dashboard data...")
+                
                 val usersResult = userRepository.getAllUsers()
+                android.util.Log.d("AdminDashboard", "Users result: ${usersResult.isSuccess}")
+                
                 val tpsResult = tpsRepository.getAllTPS()
                 val schedulesResult = scheduleRepository.getAllSchedules()
                 val activeDriverLocations = scheduleRepository.getAllActiveDriverLocations()
@@ -60,6 +64,15 @@ class AdminDashboardViewModel @Inject constructor(
                 val users = usersResult.getOrNull() ?: emptyList()
                 val tpsLocations = tpsResult.getOrNull() ?: emptyList()
                 val schedules = schedulesResult
+                
+                android.util.Log.d("AdminDashboard", "Final users count: ${users.size}")
+                users.forEach { user ->
+                    android.util.Log.d("AdminDashboard", "User: ${user.name} (${user.role}) - Approved: ${user.approved}")
+                }
+                
+                if (usersResult.isFailure) {
+                    android.util.Log.e("AdminDashboard", "Users loading failed", usersResult.exceptionOrNull())
+                }
                 
                 val stats = calculateStats(users, tpsLocations, schedules)
                 
@@ -144,9 +157,21 @@ class AdminDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
             
+            android.util.Log.d("AdminDashboard", "Updating TPS status - ID: '$tpsId', Status: ${status.name}")
+            
+            if (tpsId.isBlank()) {
+                android.util.Log.e("AdminDashboard", "TPS ID is blank, cannot update status")
+                _uiState.value = _uiState.value.copy(
+                    error = "Invalid TPS ID - cannot update status",
+                    isLoading = false
+                )
+                return@launch
+            }
+            
             val result = tpsRepository.updateTPSStatus(tpsId, status)
             result.fold(
                 onSuccess = {
+                    android.util.Log.d("AdminDashboard", "TPS status updated successfully for ID: $tpsId")
                     _uiState.value = _uiState.value.copy(
                         message = "TPS status updated successfully",
                         isLoading = false
@@ -154,6 +179,7 @@ class AdminDashboardViewModel @Inject constructor(
                     loadDashboardData() // Refresh data
                 },
                 onFailure = { error ->
+                    android.util.Log.e("AdminDashboard", "Failed to update TPS status for ID: $tpsId", error)
                     _uiState.value = _uiState.value.copy(
                         error = "Failed to update TPS status: ${error.message}",
                         isLoading = false
@@ -213,21 +239,7 @@ class AdminDashboardViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(message = null, error = null)
     }
 
-    fun seedSampleData() {
-        viewModelScope.launch {
-            try {
-                // This will trigger data seeding if needed
-                loadDashboardData()
-                _uiState.value = _uiState.value.copy(
-                    message = "Sample data loading initiated. Please refresh to see results."
-                )
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(
-                    error = "Failed to seed data: ${e.message}"
-                )
-            }
-        }
-    }
+
 
     private fun calculateStats(users: List<User>, tpsLocations: List<TPS>, schedules: List<Schedule>): DashboardStats {
         val totalUsers = users.size

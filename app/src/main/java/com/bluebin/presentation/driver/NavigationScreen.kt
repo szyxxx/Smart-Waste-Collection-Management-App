@@ -5,12 +5,15 @@ package com.bluebin.presentation.driver
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.NavigateNext
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +45,7 @@ import android.util.Log
 import com.bluebin.data.model.TPS
 import com.bluebin.ui.components.*
 import com.bluebin.ui.theme.*
+import com.bluebin.util.PhotoUtils
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -61,18 +65,26 @@ fun NavigationScreen(
     var notes by remember { mutableStateOf("") }
     var showBottomSheet by remember { mutableStateOf(false) }
     
-    // Permission handling
+    // Permission handling - Location is required, camera is optional
     val locationPermissions = rememberMultiplePermissionsState(
         permissions = listOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+    )
+    
+    // Camera permission separate since it's optional
+    val cameraPermission = rememberMultiplePermissionsState(
+        permissions = listOf(
             Manifest.permission.CAMERA
         )
     )
     
-    // Request permissions when screen loads
-    LaunchedEffect(Unit) {
-        locationPermissions.launchMultiplePermissionRequest()
+    // Check permissions when screen loads - only request if location permission not granted
+    LaunchedEffect(locationPermissions.allPermissionsGranted) {
+        if (!locationPermissions.allPermissionsGranted) {
+            locationPermissions.launchMultiplePermissionRequest()
+        }
     }
     
     // Find current active stop
@@ -80,25 +92,62 @@ fun NavigationScreen(
     val nextStop = currentRoute.stops.getOrNull(currentStopIndex + 1)
     val isLastStop = currentStopIndex >= currentRoute.stops.size - 1
     
-    // Camera setup
-    val photoFile = remember {
-        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        File(context.cacheDir, "JPEG_${timeStamp}_proof.jpg")
-    }
+    // State for error handling  
+    var errorMessage by remember { mutableStateOf<String?>(null) }
     
-    val photoUri = remember {
-        FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            photoFile
-        )
-    }
-    
+    // Simplified camera launcher using a temporary file
     val cameraLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.TakePicture()
     ) { success ->
         if (success) {
-            capturedPhotoUri = photoUri
+            Log.d("NavigationScreen", "Photo captured successfully: $capturedPhotoUri")
+            // Verify the file exists and is readable
+            try {
+                val currentUri = capturedPhotoUri
+                if (currentUri != null) {
+                    // Test if we can read the photo data
+                    val canRead = when (currentUri.scheme) {
+                        "content" -> {
+                            try {
+                                context.contentResolver.openInputStream(currentUri)?.use { inputStream ->
+                                    val bytes = inputStream.readBytes()
+                                    Log.d("NavigationScreen", "Content URI photo verified: ${bytes.size} bytes")
+                                    bytes.isNotEmpty()
+                                } ?: false
+                            } catch (e: Exception) {
+                                Log.e("NavigationScreen", "Failed to read content URI", e)
+                                false
+                            }
+                        }
+                        "file" -> {
+                            val photoFile = java.io.File(currentUri.path ?: "")
+                            val exists = photoFile.exists() && photoFile.length() > 0
+                            if (exists) {
+                                Log.d("NavigationScreen", "File URI photo verified: ${photoFile.absolutePath} (${photoFile.length()} bytes)")
+                            }
+                            exists
+                        }
+                        else -> false
+                    }
+                    
+                    if (canRead) {
+                        errorMessage = null // Clear any previous errors
+                    } else {
+                        Log.w("NavigationScreen", "Photo file not found or empty after capture")
+                        errorMessage = "Photo may not have been saved properly. You can continue without it or try again."
+                    }
+                } else {
+                    Log.w("NavigationScreen", "Photo URI is null after capture")
+                    errorMessage = "Photo URI is null. You can continue without it or try again."
+                }
+            } catch (e: Exception) {
+                Log.e("NavigationScreen", "Error verifying photo file", e)
+                errorMessage = "Error verifying photo: ${e.message}. You can continue without it or try again."
+            }
+        } else {
+            Log.e("NavigationScreen", "Photo capture failed or cancelled")
+            errorMessage = "Photo capture failed or was cancelled. You can continue without a photo."
+            capturedPhotoUri = null
         }
     }
     
@@ -131,22 +180,75 @@ fun NavigationScreen(
                 capturedPhotoUri = capturedPhotoUri,
                 notes = notes,
                 onNotesChange = { notes = it },
-                onCapturePhoto = { cameraLauncher.launch(photoUri) },
-                onArrivedAtStop = {
-                    if (capturedPhotoUri != null) {
-                        driverViewModel.completeCollection(
-                            stopIndex = currentStopIndex,
-                            proofPhoto = capturedPhotoUri.toString(),
-                            notes = notes
-                        )
-                        
-                        if (isLastStop) {
-                            onNavigationComplete()
+                onCapturePhoto = { 
+                    try {
+                        // Check if camera permission is granted
+                        if (cameraPermission.allPermissionsGranted) {
+                            try {
+                                // Create a simple temporary file in cache directory
+                                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                                val photoFile = File(context.cacheDir, "temp_photo_${timeStamp}.jpg")
+                                
+                                // Create URI - try multiple approaches for compatibility
+                                val photoUri = try {
+                                    FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        photoFile
+                                    )
+                                } catch (e: Exception) {
+                                    Log.w("NavigationScreen", "FileProvider failed, using file URI: ${e.message}")
+                                    Uri.fromFile(photoFile)
+                                }
+                                
+                                Log.d("NavigationScreen", "Attempting to capture photo to: ${photoFile.absolutePath}")
+                                
+                                // Set the URI for the callback
+                                capturedPhotoUri = photoUri
+                                
+                                // Launch camera
+                                cameraLauncher.launch(photoUri)
+                                
+                            } catch (e: Exception) {
+                                Log.e("NavigationScreen", "Camera setup failed", e)
+                                errorMessage = "Camera setup failed. You can continue without a photo."
+                            }
                         } else {
-                            currentStopIndex++
-                            capturedPhotoUri = null
-                            notes = ""
+                            Log.w("NavigationScreen", "Camera permission not granted")
+                            errorMessage = "Camera permission required. Tap here to grant permission, or continue without a photo."
+                            // Re-request camera permission
+                            cameraPermission.launchMultiplePermissionRequest()
                         }
+                    } catch (e: Exception) {
+                        Log.e("NavigationScreen", "Error setting up camera capture", e)
+                        errorMessage = "Camera error: ${e.message}. You can continue without a photo."
+                    }
+                },
+                onArrivedAtStop = {
+                    // Allow completion with or without photo
+                    val photoPath = if (PhotoUtils.isValidPhotoUri(capturedPhotoUri)) {
+                        capturedPhotoUri.toString()
+                    } else {
+                        null // Use null instead of empty string for cleaner handling
+                    }
+                    
+                    Log.d("NavigationScreen", "Completing collection - Stop: ${currentStopIndex + 1}, Photo: $photoPath, Notes: '$notes'")
+                    
+                    driverViewModel.completeCollection(
+                        stopIndex = currentStopIndex,
+                        proofPhoto = photoPath,
+                        notes = notes
+                    )
+                    
+                    if (isLastStop) {
+                        Log.d("NavigationScreen", "Last stop completed - finishing route")
+                        onNavigationComplete()
+                    } else {
+                        Log.d("NavigationScreen", "Moving to next stop: ${currentStopIndex + 1} -> ${currentStopIndex + 2}")
+                        currentStopIndex++
+                        capturedPhotoUri = null
+                        notes = ""
+                        errorMessage = null // Clear any error messages
                     }
                 },
                 onShowDetails = { showBottomSheet = true },
@@ -157,6 +259,62 @@ fun NavigationScreen(
             PermissionRequestScreen(
                 onRequestPermissions = { locationPermissions.launchMultiplePermissionRequest() }
             )
+        }
+        
+        // Show error message if camera is not available
+        errorMessage?.let { message ->
+            LaunchedEffect(message) {
+                // Auto-dismiss after 5 seconds
+                kotlinx.coroutines.delay(5000)
+                errorMessage = null
+            }
+            
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp)
+                    .fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Camera Notice",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                    IconButton(
+                        onClick = { errorMessage = null }
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Dismiss",
+                            tint = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -269,16 +427,19 @@ private fun GoogleMapView(
     LaunchedEffect(currentStopIndex, userLocation) {
         if (userLocation != null && currentStop != null) {
             isLoadingRoute = true
+            Log.d("NavigationScreen", "Getting directions from ${userLocation!!.latitude},${userLocation!!.longitude} to ${currentStop.latitude},${currentStop.longitude}")
             try {
                 val directions = getDirections(
                     origin = userLocation!!,
                     destination = LatLng(currentStop.latitude, currentStop.longitude),
                     context = context
                 )
-                routePoints = directions
                 
-                // Auto-fit camera to show both user location and destination
                 if (directions.isNotEmpty()) {
+                    routePoints = directions
+                    Log.d("NavigationScreen", "Route found with ${directions.size} points")
+                    
+                    // Auto-fit camera to show both user location and destination
                     val bounds = LatLngBounds.builder().apply {
                         include(userLocation!!)
                         include(LatLng(currentStop.latitude, currentStop.longitude))
@@ -289,8 +450,12 @@ private fun GoogleMapView(
                         CameraUpdateFactory.newLatLngBounds(bounds, 100),
                         1500
                     )
+                } else {
+                    Log.w("NavigationScreen", "No route points returned, using straight line")
+                    routePoints = listOf(userLocation!!, LatLng(currentStop.latitude, currentStop.longitude))
                 }
             } catch (e: Exception) {
+                Log.e("NavigationScreen", "Error getting directions, using straight line fallback", e)
                 // Fallback to straight line if directions fail
                 routePoints = listOf(userLocation!!, LatLng(currentStop.latitude, currentStop.longitude))
             } finally {
@@ -415,7 +580,7 @@ private fun NavigationTopBar(
                 modifier = Modifier.size(40.dp)
             ) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = Color(0xFF1976D2)
                 )
@@ -561,7 +726,7 @@ private fun NavigationBottomPanel(
                 }
             }
             
-            Divider(color = Color(0xFFE0E0E0))
+            HorizontalDivider(color = Color(0xFFE0E0E0))
             
             // Actions
             Row(
@@ -573,29 +738,29 @@ private fun NavigationBottomPanel(
                     onClick = onCapturePhoto,
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (capturedPhotoUri != null) Color(0xFF4CAF50) else Color(0xFF2196F3)
+                        containerColor = if (PhotoUtils.isValidPhotoUri(capturedPhotoUri)) Color(0xFF4CAF50) else Color(0xFF2196F3)
                     )
                 ) {
                     Icon(
-                        if (capturedPhotoUri != null) Icons.Default.CheckCircle else Icons.Default.CameraAlt,
+                        if (PhotoUtils.isValidPhotoUri(capturedPhotoUri)) Icons.Default.CheckCircle else Icons.Default.CameraAlt,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(if (capturedPhotoUri != null) "Retake" else "Capture")
+                    Text(if (PhotoUtils.isValidPhotoUri(capturedPhotoUri)) "Retake" else "Capture")
                 }
                 
                 // Complete/Next button
                 Button(
                     onClick = onArrivedAtStop,
                     modifier = Modifier.weight(1f),
-                    enabled = capturedPhotoUri != null,
+                    enabled = true, // Always enabled - photo is optional
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF4CAF50)
                     )
                 ) {
                     Icon(
-                        if (isLastStop) Icons.Default.Flag else Icons.Default.NavigateNext,
+                        if (isLastStop) Icons.Default.Flag else Icons.AutoMirrored.Filled.NavigateNext,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -604,7 +769,7 @@ private fun NavigationBottomPanel(
                 }
             }
             
-            // Notes field (compact)
+            // Notes field (compact) - always show when photo is captured or when no camera is available
             if (capturedPhotoUri != null) {
                 OutlinedTextField(
                     value = notes,
@@ -649,13 +814,13 @@ private fun PermissionRequestScreen(
                 )
                 
                 Text(
-                    text = "Location & Camera Access Required",
+                    text = "Location Permission Required",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
                 
                 Text(
-                    text = "To provide navigation and capture proof of collection, we need access to your location and camera.",
+                    text = "This app needs location access to provide navigation and track your route. Please grant location permission to continue.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF666666)
                 )
@@ -685,9 +850,11 @@ suspend fun getDirections(
             .getString("com.google.android.geo.API_KEY") ?: ""
         
         if (apiKey.isEmpty()) {
-            Log.e("NavigationScreen", "Google Maps API key not found")
+            Log.e("NavigationScreen", "Google Maps API key not found in manifest")
             return@withContext listOf(origin, destination)
         }
+        
+        Log.d("NavigationScreen", "Using API key: ${apiKey.take(10)}...")
         
         val originStr = "${origin.latitude},${origin.longitude}"
         val destinationStr = "${destination.latitude},${destination.longitude}"
@@ -704,13 +871,19 @@ suspend fun getDirections(
         connection.readTimeout = 10000
         
         val responseCode = connection.responseCode
+        Log.d("NavigationScreen", "Directions API response code: $responseCode")
+        
         if (responseCode == HttpURLConnection.HTTP_OK) {
             val response = BufferedReader(InputStreamReader(connection.inputStream)).use { 
                 it.readText() 
             }
             
+            Log.d("NavigationScreen", "Directions API response: ${response.take(200)}...")
+            
             val jsonResponse = JSONObject(response)
             val routes = jsonResponse.getJSONArray("routes")
+            
+            Log.d("NavigationScreen", "Found ${routes.length()} routes")
             
             if (routes.length() > 0) {
                 val route = routes.getJSONObject(0)
@@ -727,10 +900,12 @@ suspend fun getDirections(
                         val points = polyline.getString("points")
                         
                         // Decode polyline points
-                        polylinePoints.addAll(decodePolyline(points))
+                        val decodedPoints = decodePolyline(points)
+                        polylinePoints.addAll(decodedPoints)
                     }
                 }
                 
+                Log.d("NavigationScreen", "Successfully decoded ${polylinePoints.size} route points")
                 return@withContext polylinePoints
             }
         } else {
