@@ -66,7 +66,7 @@ fun AdminDashboardScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     dashboardViewModel: AdminDashboardViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
+    val uiState by authViewModel.uiState.collectAsState()
     val dashboardState by dashboardViewModel.uiState.collectAsState()
     var currentDestination by remember { mutableStateOf<AdminDestination?>(null) }
     
@@ -142,7 +142,7 @@ fun AdminDashboardScreen(
 
         // Welcome message
         AnimatedVisibility(
-            visible = authState.user != null,
+            visible = uiState.user != null,
             enter = slideInVertically() + fadeIn(),
             exit = slideOutVertically() + fadeOut()
         ) {
@@ -159,7 +159,7 @@ fun AdminDashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Welcome back, ${authState.user?.name ?: "Admin"}!",
+                            text = "Welcome back, ${uiState.user?.name ?: "Admin"}!",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface

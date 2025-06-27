@@ -11,13 +11,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -36,19 +36,18 @@ import com.bluebin.ui.components.*
 import com.bluebin.ui.theme.*
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(
     onNavigateToMain: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
-    var isLogin by remember { mutableStateOf(true) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var selectedRole by remember { mutableStateOf(UserRole.DRIVER) }
+    val uiState by authViewModel.uiState.collectAsState()
+    val email by authViewModel.email.collectAsState()
+    val password by authViewModel.password.collectAsState()
+    val confirmPassword by authViewModel.confirmPassword.collectAsState()
+    val name by authViewModel.name.collectAsState()
+    val selectedRole by authViewModel.selectedRole.collectAsState()
+    
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     var showForgotPassword by remember { mutableStateOf(false) }
@@ -56,22 +55,17 @@ fun AuthScreen(
     
     val focusManager = LocalFocusManager.current
 
-    // Show screen with animation
+    // Screen entrance animation
     LaunchedEffect(Unit) {
         delay(100)
         screenVisible = true
     }
 
-    // Handle auth state changes
-    LaunchedEffect(authState.user, authState.isAuthenticated) {
-        if (authState.user != null && authState.isAuthenticated) {
+    // Handle successful authentication
+    LaunchedEffect(uiState.isAuthenticated) {
+        if (uiState.isAuthenticated) {
             onNavigateToMain()
         }
-    }
-
-    // Clear validations when switching modes
-    LaunchedEffect(isLogin) {
-        authViewModel.clearValidationErrors()
     }
 
     Box(
@@ -86,7 +80,7 @@ fun AuthScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                             MaterialTheme.colorScheme.background,
                             MaterialTheme.colorScheme.surface
                         )
@@ -96,13 +90,10 @@ fun AuthScreen(
 
         AnimatedVisibility(
             visible = screenVisible,
-            enter = fadeIn(
-                animationSpec = tween(800, easing = EaseOutQuart)
-            ) + slideInVertically(
-                animationSpec = tween(800, easing = EaseOutQuart),
+            enter = fadeIn(animationSpec = tween(600)) + slideInVertically(
+                animationSpec = tween(600),
                 initialOffsetY = { it / 4 }
-            ),
-            exit = fadeOut() + slideOutVertically()
+            )
         ) {
             Column(
                 modifier = Modifier
@@ -111,142 +102,92 @@ fun AuthScreen(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.Center
             ) {
-                // Header with smooth entrance
-                AnimatedVisibility(
-                    visible = screenVisible,
-                    enter = fadeIn(
-                        animationSpec = tween(600, delayMillis = 200, easing = EaseOutQuart)
-                    ) + slideInVertically(
-                        animationSpec = tween(600, delayMillis = 200, easing = EaseOutQuart),
-                        initialOffsetY = { -it / 3 }
+                // App Logo and Header
+                AppHeader(isSignUp = uiState.isSignUpMode)
+                
+                Spacer(modifier = Modifier.height(40.dp))
+
+                // Auth Toggle
+                AuthModeToggle(
+                    isSignUp = uiState.isSignUpMode,
+                    onToggle = { authViewModel.toggleAuthMode() }
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Main Auth Form
+                ModernCard {
+                    AuthForm(
+                        uiState = uiState,
+                        email = email,
+                        onEmailChange = authViewModel::updateEmail,
+                        password = password,
+                        onPasswordChange = authViewModel::updatePassword,
+                        confirmPassword = confirmPassword,
+                        onConfirmPasswordChange = authViewModel::updateConfirmPassword,
+                        name = name,
+                        onNameChange = authViewModel::updateName,
+                        selectedRole = selectedRole,
+                        onRoleSelected = authViewModel::updateSelectedRole,
+                        passwordVisible = passwordVisible,
+                        onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
+                        confirmPasswordVisible = confirmPasswordVisible,
+                        onConfirmPasswordVisibilityToggle = { confirmPasswordVisible = !confirmPasswordVisible },
+                        onForgotPasswordClick = { showForgotPassword = true },
+                        onSubmit = {
+                            if (uiState.isSignUpMode) {
+                                authViewModel.signUp()
+                            } else {
+                                authViewModel.signIn()
+                            }
+                        },
+                        focusManager = focusManager
                     )
-                ) {
-                    ModernAuthHeader(isLogin = isLogin)
                 }
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Main content card with staggered animation
-                AnimatedVisibility(
-                    visible = screenVisible,
-                    enter = fadeIn(
-                        animationSpec = tween(600, delayMillis = 400, easing = EaseOutQuart)
-                    ) + slideInVertically(
-                        animationSpec = tween(600, delayMillis = 400, easing = EaseOutQuart),
-                        initialOffsetY = { it / 3 }
-                    )
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(24.dp)
+                // Error and Success Messages
+                uiState.error?.let { error ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
                     ) {
-                        // Auth Mode Toggle with smooth transition
-                        AnimatedContent(
-                            targetState = isLogin,
-                            transitionSpec = {
-                                fadeIn(animationSpec = tween(400, easing = EaseInOutQuart)) togetherWith
-                                fadeOut(animationSpec = tween(400, easing = EaseInOutQuart))
-                            },
-                            label = "authToggle"
-                        ) { isLoginMode ->
-                            ModernAuthToggle(
-                                isLogin = isLoginMode,
-                                onToggle = { 
-                                    isLogin = it
-                                    authViewModel.setSignUpMode(!it)
-                                }
-                            )
-                        }
-
-                        // Main Auth Form with content animation
-                        ModernCard {
-                            AnimatedContent(
-                                targetState = isLogin,
-                                transitionSpec = {
-                                    (slideInHorizontally(
-                                        animationSpec = tween(500, easing = EaseInOutQuart),
-                                        initialOffsetX = { if (targetState) -it else it }
-                                    ) + fadeIn(animationSpec = tween(500, easing = EaseInOutQuart))) togetherWith
-                                    (slideOutHorizontally(
-                                        animationSpec = tween(500, easing = EaseInOutQuart),
-                                        targetOffsetX = { if (targetState) it else -it }
-                                    ) + fadeOut(animationSpec = tween(500, easing = EaseInOutQuart)))
-                                },
-                                label = "authForm"
-                            ) { isLoginMode ->
-                                AuthFormContent(
-                                    isLogin = isLoginMode,
-                                    authState = authState,
-                                    email = email,
-                                    onEmailChange = { email = it },
-                                    password = password,
-                                    onPasswordChange = { password = it },
-                                    confirmPassword = confirmPassword,
-                                    onConfirmPasswordChange = { confirmPassword = it },
-                                    name = name,
-                                    onNameChange = { name = it },
-                                    selectedRole = selectedRole,
-                                    onRoleSelected = { selectedRole = it },
-                                    passwordVisible = passwordVisible,
-                                    onPasswordVisibilityToggle = { passwordVisible = !passwordVisible },
-                                    confirmPasswordVisible = confirmPasswordVisible,
-                                    onConfirmPasswordVisibilityToggle = { confirmPasswordVisible = !confirmPasswordVisible },
-                                    onForgotPasswordClick = { showForgotPassword = true },
-                                    focusManager = focusManager,
-                                    onSubmit = {
-                                        if (isLoginMode) {
-                                            authViewModel.signIn(email, password)
-                                        } else {
-                                            authViewModel.signUp(email, password, confirmPassword, name, selectedRole)
-                                        }
-                                    }
-                                )
-                            }
-                        }
-
-                        // Messages with entrance animation
-                        AnimatedVisibility(
-                            visible = authState.error != null,
-                            enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
-                            exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-                        ) {
-                            authState.error?.let { error ->
-                                ModernMessageCard(
-                                    message = error,
-                                    type = MessageType.ERROR,
-                                    onDismiss = { authViewModel.clearError() }
-                                )
-                            }
-                        }
-
-                        AnimatedVisibility(
-                            visible = authState.successMessage != null,
-                            enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
-                            exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-                        ) {
-                            authState.successMessage?.let { message ->
-                                ModernMessageCard(
-                                    message = message,
-                                    type = MessageType.SUCCESS,
-                                    onDismiss = { authViewModel.clearMessage() }
-                                )
-                            }
-                        }
-
-                        // Additional info for registration with smooth entrance
-                        AnimatedVisibility(
-                            visible = !isLogin,
-                            enter = expandVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                                   fadeIn(animationSpec = tween(400, easing = EaseOutQuart)),
-                            exit = shrinkVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                                  fadeOut(animationSpec = tween(400, easing = EaseOutQuart))
-                        ) {
-                            ModernAlertCard(
-                                title = "Account Approval Required",
-                                message = "New accounts require admin approval before access is granted. You will be notified once your account is approved.",
-                                alertType = AlertType.INFO
-                            )
-                        }
+                        ModernMessageCard(
+                            message = error,
+                            type = MessageType.ERROR,
+                            onDismiss = { authViewModel.clearMessages() }
+                        )
                     }
+                }
+
+                uiState.successMessage?.let { message ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        ModernMessageCard(
+                            message = message,
+                            type = MessageType.SUCCESS,
+                            onDismiss = { authViewModel.clearMessages() }
+                        )
+                    }
+                }
+
+                // Signup info
+                AnimatedVisibility(
+                    visible = uiState.isSignUpMode,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    ModernAlertCard(
+                        title = "Account Approval Required",
+                        message = "New accounts require admin approval before access is granted. You will be notified once approved.",
+                        alertType = AlertType.INFO
+                    )
                 }
             }
         }
@@ -265,107 +206,92 @@ fun AuthScreen(
 }
 
 @Composable
-private fun ModernAuthHeader(isLogin: Boolean) {
+private fun AppHeader(isSignUp: Boolean) {
     Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        // App Logo with subtle animation
-        val logoScale by animateFloatAsState(
-            targetValue = 1f,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioMediumBouncy,
-                stiffness = Spring.StiffnessLow
-            ),
-            label = "logoScale"
-        )
-        
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
+        // App Icon and Title Row
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // App Icon
+            Box(
+                modifier = Modifier
+                    .size(60.dp)
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🗑️",
+                    fontSize = 32.sp
+                )
+            }
+            
+            // App Name
             Text(
-                text = "🗑️",
-                fontSize = 40.sp,
-                modifier = Modifier.scale(logoScale)
+                text = "BlueBin",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
         
-        // Dynamic title with smooth transition
+        // Dynamic subtitle
         AnimatedContent(
-            targetState = isLogin,
+            targetState = isSignUp,
             transitionSpec = {
-                fadeIn(tween(400, easing = EaseInOutQuart)) togetherWith
-                fadeOut(tween(400, easing = EaseInOutQuart))
-            },
-            label = "headerTitle"
-        ) { isLoginMode ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "BlueBin",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    letterSpacing = 1.sp
-                )
-                
-                Text(
-                    text = if (isLoginMode) 
-                        "Welcome back to your dashboard" 
-                    else 
-                        "Join our waste management team",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    fontWeight = FontWeight.Medium
-                )
+                fadeIn(tween(300)) togetherWith fadeOut(tween(300))
             }
+        ) { isSignUpMode ->
+            Text(
+                text = if (isSignUpMode) 
+                    "Join our waste management system" 
+                else 
+                    "Welcome back to your dashboard",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start
+            )
         }
     }
 }
 
 @Composable
-private fun ModernAuthToggle(
-    isLogin: Boolean,
-    onToggle: (Boolean) -> Unit
+private fun AuthModeToggle(
+    isSignUp: Boolean,
+    onToggle: () -> Unit
 ) {
-    Card(
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(4.dp),
+            modifier = Modifier.padding(4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             ToggleButton(
                 text = "Sign In",
-                isSelected = isLogin,
-                onClick = { onToggle(true) },
+                isSelected = !isSignUp,
+                onClick = { if (isSignUp) onToggle() },
                 modifier = Modifier.weight(1f)
             )
             
             ToggleButton(
                 text = "Sign Up",
-                isSelected = !isLogin,
-                onClick = { onToggle(false) },
+                isSelected = isSignUp,
+                onClick = { if (!isSignUp) onToggle() },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -385,8 +311,7 @@ private fun ToggleButton(
         } else {
             Color.Transparent
         },
-        animationSpec = tween(300, easing = EaseInOutQuart),
-        label = "backgroundColor"
+        animationSpec = tween(300)
     )
     
     val textColor by animateColorAsState(
@@ -395,8 +320,7 @@ private fun ToggleButton(
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         },
-        animationSpec = tween(300, easing = EaseInOutQuart),
-        label = "textColor"
+        animationSpec = tween(300)
     )
     
     Button(
@@ -420,9 +344,8 @@ private fun ToggleButton(
 }
 
 @Composable
-private fun AuthFormContent(
-    isLogin: Boolean,
-    authState: AuthUiState,
+private fun AuthForm(
+    uiState: AuthUiState,
     email: String,
     onEmailChange: (String) -> Unit,
     password: String,
@@ -438,129 +361,92 @@ private fun AuthFormContent(
     confirmPasswordVisible: Boolean,
     onConfirmPasswordVisibilityToggle: () -> Unit,
     onForgotPasswordClick: () -> Unit,
-    focusManager: androidx.compose.ui.focus.FocusManager,
-    onSubmit: () -> Unit
+    onSubmit: () -> Unit,
+    focusManager: androidx.compose.ui.focus.FocusManager
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Form Title with animation
+        // Form Header
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = if (isLogin) "Welcome Back" else "Create Account",
+                text = if (uiState.isSignUpMode) "Create Account" else "Welcome Back",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             
             Text(
-                text = if (isLogin) 
-                    "Sign in to continue to your dashboard" 
+                text = if (uiState.isSignUpMode) 
+                    "Join the BlueBin waste management system" 
                 else 
-                    "Join BlueBin waste management system",
+                    "Sign in to continue to your dashboard",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         
-        // Form fields with staggered animations
+        // Form Fields
         Column(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Name field (register only)
+            // Name field (signup only)
             AnimatedVisibility(
-                visible = !isLogin,
-                enter = expandVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                       fadeIn(animationSpec = tween(400, easing = EaseOutQuart)),
-                exit = shrinkVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                      fadeOut(animationSpec = tween(400, easing = EaseOutQuart))
+                visible = uiState.isSignUpMode,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ModernTextField(
-                        value = name,
-                        onValueChange = onNameChange,
-                        label = "Full Name",
-                        leadingIcon = Icons.Default.Person,
-                        isError = authState.nameValidation != null,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                        keyboardActions = KeyboardActions(
-                            onNext = { focusManager.moveFocus(FocusDirection.Down) }
-                        )
-                    )
-                    
-                    authState.nameValidation?.let { error ->
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-
-            // Email field
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ModernTextField(
-                    value = email,
-                    onValueChange = onEmailChange,
-                    label = "Email Address",
-                    leadingIcon = Icons.Default.Email,
-                    isError = authState.emailValidation != null,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Next
-                    ),
+                    value = name,
+                    onValueChange = onNameChange,
+                    label = "Full Name",
+                    leadingIcon = Icons.Default.Person,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                     keyboardActions = KeyboardActions(
                         onNext = { focusManager.moveFocus(FocusDirection.Down) }
                     )
                 )
-                
-                authState.emailValidation?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
             }
+
+            // Email field
+            ModernTextField(
+                value = email,
+                onValueChange = onEmailChange,
+                label = "Email Address",
+                leadingIcon = Icons.Default.Email,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) }
+                )
+            )
 
             // Password field
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModernTextField(
-                    value = password,
-                    onValueChange = onPasswordChange,
-                    label = "Password",
-                    leadingIcon = Icons.Default.Lock,
-                    trailingIcon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                    onTrailingIconClick = onPasswordVisibilityToggle,
-                    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                    isError = authState.passwordValidation != null,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = if (isLogin) ImeAction.Done else ImeAction.Next
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onNext = { focusManager.moveFocus(FocusDirection.Down) },
-                        onDone = { if (isLogin) onSubmit() }
-                    )
+            ModernTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = "Password",
+                leadingIcon = Icons.Default.Lock,
+                trailingIcon = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                onTrailingIconClick = onPasswordVisibilityToggle,
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = if (uiState.isSignUpMode) ImeAction.Next else ImeAction.Done
+                ),
+                keyboardActions = KeyboardActions(
+                    onNext = { focusManager.moveFocus(FocusDirection.Down) },
+                    onDone = { if (!uiState.isSignUpMode) onSubmit() }
                 )
-                
-                authState.passwordValidation?.let { error ->
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            )
 
-            // Confirm password field (register only)
+            // Confirm password field (signup only)
             AnimatedVisibility(
-                visible = !isLogin,
-                enter = expandVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                       fadeIn(animationSpec = tween(400, easing = EaseOutQuart)),
-                exit = shrinkVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                      fadeOut(animationSpec = tween(400, easing = EaseOutQuart))
+                visible = uiState.isSignUpMode,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
                 ModernTextField(
                     value = confirmPassword,
@@ -580,15 +466,13 @@ private fun AuthFormContent(
                 )
             }
 
-            // Role selection (register only)
+            // Role selection (signup only)
             AnimatedVisibility(
-                visible = !isLogin,
-                enter = expandVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                       fadeIn(animationSpec = tween(400, easing = EaseOutQuart)),
-                exit = shrinkVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                      fadeOut(animationSpec = tween(400, easing = EaseOutQuart))
+                visible = uiState.isSignUpMode,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                RoleSelectionCard(
+                RoleSelectionSection(
                     selectedRole = selectedRole,
                     onRoleSelected = onRoleSelected
                 )
@@ -596,11 +480,9 @@ private fun AuthFormContent(
 
             // Forgot password (login only)
             AnimatedVisibility(
-                visible = isLogin,
-                enter = expandVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                       fadeIn(animationSpec = tween(400, easing = EaseOutQuart)),
-                exit = shrinkVertically(animationSpec = tween(400, easing = EaseOutQuart)) + 
-                      fadeOut(animationSpec = tween(400, easing = EaseOutQuart))
+                visible = !uiState.isSignUpMode,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -619,21 +501,21 @@ private fun AuthFormContent(
 
         // Submit button
         val isFormValid = email.isNotBlank() && password.isNotBlank() && 
-                         (isLogin || (name.isNotBlank() && confirmPassword.isNotBlank()))
+                         (!uiState.isSignUpMode || (name.isNotBlank() && confirmPassword.isNotBlank()))
         
         ModernPrimaryButton(
-            text = if (isLogin) "Sign In" else "Create Account",
+            text = if (uiState.isSignUpMode) "Create Account" else "Sign In",
             onClick = onSubmit,
-            isLoading = authState.isLoading,
+            isLoading = uiState.isLoading,
             enabled = isFormValid,
-            icon = if (isLogin) Icons.Default.Login else Icons.Default.PersonAdd,
+            icon = if (uiState.isSignUpMode) Icons.Default.PersonAdd else Icons.AutoMirrored.Filled.Login,
             modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 @Composable
-private fun RoleSelectionCard(
+private fun RoleSelectionSection(
     selectedRole: UserRole,
     onRoleSelected: (UserRole) -> Unit
 ) {
@@ -651,73 +533,82 @@ private fun RoleSelectionCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             UserRole.values().forEach { role ->
-                val isSelected = selectedRole == role
-                val backgroundColor by animateColorAsState(
-                    targetValue = if (isSelected) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    animationSpec = tween(300, easing = EaseInOutQuart),
-                    label = "backgroundColor"
+                RoleCard(
+                    role = role,
+                    isSelected = selectedRole == role,
+                    onSelected = { onRoleSelected(role) }
                 )
-                
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onRoleSelected(role) },
-                    colors = CardDefaults.cardColors(containerColor = backgroundColor),
-                    shape = RoundedCornerShape(12.dp),
-                    elevation = CardDefaults.cardElevation(
-                        defaultElevation = if (isSelected) 2.dp else 0.dp
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        RadioButton(
-                            selected = isSelected,
-                            onClick = { onRoleSelected(role) }
-                        )
-                        
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = role.displayName,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = when (role) {
-                                    UserRole.DRIVER -> "Collect waste and manage collection routes"
-                                    UserRole.TPS_OFFICER -> "Monitor TPS status and manage collections"
-                                    UserRole.ADMIN -> "System administration and oversight"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        
-                        Icon(
-                            imageVector = when (role) {
-                                UserRole.DRIVER -> Icons.Default.LocalShipping
-                                UserRole.TPS_OFFICER -> Icons.Default.BusinessCenter
-                                UserRole.ADMIN -> Icons.Default.AdminPanelSettings
-                            },
-                            contentDescription = null,
-                            tint = if (isSelected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
-                }
             }
+        }
+    }
+}
+
+@Composable
+private fun RoleCard(
+    role: UserRole,
+    isSelected: Boolean,
+    onSelected: () -> Unit
+) {
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        animationSpec = tween(300)
+    )
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelected() },
+        color = backgroundColor,
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = if (isSelected) 2.dp else 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            RadioButton(
+                selected = isSelected,
+                onClick = onSelected
+            )
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = role.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = when (role) {
+                        UserRole.DRIVER -> "Collect waste and manage routes"
+                        UserRole.TPS_OFFICER -> "Monitor TPS and manage collections"
+                        UserRole.ADMIN -> "System administration and oversight"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Icon(
+                imageVector = when (role) {
+                    UserRole.DRIVER -> Icons.Default.LocalShipping
+                    UserRole.TPS_OFFICER -> Icons.Default.BusinessCenter
+                    UserRole.ADMIN -> Icons.Default.AdminPanelSettings
+                },
+                contentDescription = null,
+                tint = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
         }
     }
 }
@@ -741,24 +632,20 @@ private fun ForgotPasswordDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
-                    text = "Enter your email address and we'll send you a link to reset your password.",
+                    text = "Enter your email address and we'll send you a reset link.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
-                OutlinedTextField(
+                ModernTextField(
                     value = resetEmail,
                     onValueChange = { resetEmail = it },
-                    label = { Text("Email Address") },
-                    leadingIcon = {
-                        Icon(Icons.Default.Email, contentDescription = null)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
+                    label = "Email Address",
+                    leadingIcon = Icons.Default.Email,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
                         imeAction = ImeAction.Done
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+                    )
                 )
             }
         },

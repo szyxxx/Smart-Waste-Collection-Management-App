@@ -48,23 +48,23 @@ enum class AppState {
 fun BluebinApp(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
+    val uiState by authViewModel.uiState.collectAsState()
     var appState by remember { mutableStateOf(AppState.SPLASH) }
     var currentRouteDetailsId by remember { mutableStateOf<String?>(null) }
     
     // Handle app state transitions
-    LaunchedEffect(authState.isLoading, authState.isAuthenticated, authState.user) {
+    LaunchedEffect(uiState.isLoading, uiState.isAuthenticated, uiState.user) {
         when {
             // Stay in splash while loading or for initial delay
-            authState.isLoading -> {
+            uiState.isLoading -> {
                 appState = AppState.SPLASH
             }
             // Navigate to auth if not authenticated
-            !authState.isAuthenticated || authState.user == null -> {
+            !uiState.isAuthenticated || uiState.user == null -> {
                 appState = AppState.AUTH
             }
             // Navigate to main if authenticated and approved
-            authState.isAuthenticated && authState.user?.approved == true -> {
+            uiState.isAuthenticated && uiState.user?.approved == true -> {
                 appState = AppState.MAIN
             }
             // Stay in auth for unapproved users
@@ -90,7 +90,7 @@ fun BluebinApp(
         
         AppState.MAIN -> {
             // User is authenticated, route based on role
-            when (authState.user?.role) {
+            when (uiState.user?.role) {
                 UserRole.ADMIN -> {
                     if (currentRouteDetailsId != null) {
                         // Show RouteDetailsScreen

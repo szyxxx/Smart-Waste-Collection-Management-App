@@ -170,7 +170,7 @@ fun TPSOfficerScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     viewModel: TPSOfficerViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
+    val authState by authViewModel.uiState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
 
     // Handle authentication state

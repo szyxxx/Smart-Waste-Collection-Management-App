@@ -41,7 +41,7 @@ fun DriverScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
     driverViewModel: DriverViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
+    val authUiState by authViewModel.uiState.collectAsState()
     val uiState by driverViewModel.uiState.collectAsState()
     val context = LocalContext.current
     
@@ -92,7 +92,7 @@ fun DriverScreen(
         driverViewModel.refreshData()
     }
 
-    if (authState.isLoading || authState.user == null) {
+    if (authUiState.isLoading || authUiState.user == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
@@ -109,7 +109,7 @@ fun DriverScreen(
     ) {
         // Modern Header with gradient
         ModernDriverHeader(
-            driverName = authState.user?.name ?: "Driver",
+            driverName = authUiState.user?.name ?: "Driver",
             isLocationTracking = uiState.isLocationTracking,
             onRefresh = { driverViewModel.refreshData() },
             onLogout = { authViewModel.signOut() }

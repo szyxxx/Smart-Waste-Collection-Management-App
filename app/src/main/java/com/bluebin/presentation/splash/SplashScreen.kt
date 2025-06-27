@@ -32,7 +32,7 @@ fun SplashScreen(
     onNavigateToMain: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val authState by authViewModel.authState.collectAsState()
+    val authState by authViewModel.uiState.collectAsState()
     
     var showLogo by remember { mutableStateOf(false) }
     var showTitle by remember { mutableStateOf(false) }
